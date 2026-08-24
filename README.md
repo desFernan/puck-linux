@@ -19,11 +19,9 @@ us. Come say hi!
 
 The pet overlay MVP is here: an always-on-top, transparent, animated
 character you can drag around, using the same avatar folder format as
-[puck-mac](https://github.com/desFernan/puck-mac). No agent features yet —
-see
-[`docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md`](docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md)
-for what's in and out of scope. The agent core, the `PuckClient`-equivalent
-window, and the socket bridge between them are follow-up work.
+[puck-mac](https://github.com/desFernan/puck-mac). No agent features yet.
+The agent core, the `PuckClient`-equivalent window, and the socket bridge
+between them are follow-up work.
 
 ### Build and run
 

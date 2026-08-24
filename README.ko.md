@@ -18,10 +18,9 @@
 
 펫 오버레이 MVP가 여기 있습니다: 항상 위에 떠 있고, 투명하며, 드래그해서
 움직일 수 있는 애니메이션 캐릭터로, [puck-mac](https://github.com/desFernan/puck-mac)과
-같은 아바타 폴더 포맷을 사용합니다. 에이전트 기능은 아직 없습니다 — 범위는
-[`docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md`](docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md)를
-참고하세요. 에이전트 코어, `PuckClient`에 해당하는 창, 그리고 둘 사이의 소켓
-브릿지는 이후 작업입니다.
+같은 아바타 폴더 포맷을 사용합니다. 에이전트 기능은 아직 없습니다. 에이전트
+코어, `PuckClient`에 해당하는 창, 그리고 둘 사이의 소켓 브릿지는 이후
+작업입니다.
 
 ### 빌드 및 실행
 

@@ -1,2 +1,6 @@
+# Internal working docs — dev notes, specs, plans. Not meant for outside
+# readers; the README is what a clone gets.
+docs/
+.superpowers/
+
 /target
-/.superpowers/
