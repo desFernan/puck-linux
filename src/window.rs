@@ -2,17 +2,30 @@ use gdk4_x11::X11Surface;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::rc::Rc;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::rust_connection::RustConnection;
 
+/// An X11 connection opened once and reused for every always-on-top hint
+/// and every window move, instead of reconnecting per call — `move_to` runs
+/// on every animation tick (60fps), so a fresh connection per call would
+/// mean 60 socket connect/disconnect cycles a second.
+struct X11State {
+    conn: RustConnection,
+    xid: u32,
+    root: u32,
+}
+
 pub struct PuckWindow {
     window: ApplicationWindow,
     drawing_area: DrawingArea,
     texture: Rc<RefCell<Option<gtk4::gdk::Texture>>>,
+    facing_right: Rc<Cell<bool>>,
+    x11: Rc<RefCell<Option<X11State>>>,
+    last_pos: Cell<Option<(i32, i32)>>,
 }
 
 impl PuckWindow {
@@ -26,8 +39,8 @@ impl PuckWindow {
             .build();
 
         // Transparent background: the window's CSS background is set to
-        // fully transparent; content drawn on top (added in Task 3) shows
-        // through everywhere else.
+        // fully transparent; content drawn on top shows through everywhere
+        // else.
         let css = gtk4::CssProvider::new();
         css.load_from_data("window { background-color: transparent; }");
         gtk4::style_context_add_provider_for_display(
@@ -40,7 +53,9 @@ impl PuckWindow {
         window.set_child(Some(&drawing_area));
 
         let texture: Rc<RefCell<Option<gtk4::gdk::Texture>>> = Rc::new(RefCell::new(None));
+        let facing_right: Rc<Cell<bool>> = Rc::new(Cell::new(true));
         let texture_for_draw = texture.clone();
+        let facing_right_for_draw = facing_right.clone();
         drawing_area.set_draw_func(move |_area, ctx, _width, _height| {
             let Some(tex) = texture_for_draw.borrow().clone() else {
                 return;
@@ -78,11 +93,23 @@ impl PuckWindow {
                 tex.download(&mut data, stride as usize);
             }
             let _ = surface.flush();
-            if let Err(e) = ctx.set_source_surface(&surface, 0.0, 0.0) {
-                eprintln!("puck: failed to set texture as paint source: {e}");
-                return;
+
+            // The sprite is drawn facing right; walking left mirrors it
+            // horizontally around its own center, matching puck-mac's
+            // sprite convention.
+            let flip = !facing_right_for_draw.get();
+            if flip {
+                let _ = ctx.save();
+                ctx.translate(width as f64, 0.0);
+                ctx.scale(-1.0, 1.0);
             }
-            let _ = ctx.paint();
+            let painted = ctx.set_source_surface(&surface, 0.0, 0.0).and_then(|()| ctx.paint());
+            if flip {
+                let _ = ctx.restore();
+            }
+            if let Err(e) = painted {
+                eprintln!("puck: failed to paint texture: {e}");
+            }
         });
 
         // Send the always-on-top hint once the window is actually mapped,
@@ -116,25 +143,29 @@ impl PuckWindow {
         // doesn't fire as expected on some other WM/compositor combination
         // — re-sending the ClientMessage is idempotent, so both firing is
         // harmless.
-        window.connect_map(|w| {
-            let w = w
-                .clone()
-                .downcast::<ApplicationWindow>()
-                .expect("map signal fired on an ApplicationWindow");
-            set_always_on_top(&w);
+        let x11: Rc<RefCell<Option<X11State>>> = Rc::new(RefCell::new(None));
+
+        let window_for_map = window.clone();
+        let x11_for_map = x11.clone();
+        window.connect_map(move |_w| {
+            set_always_on_top(&window_for_map, &x11_for_map);
         });
 
         window.present();
 
         let window_for_timeout = window.clone();
+        let x11_for_timeout = x11.clone();
         glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
-            set_always_on_top(&window_for_timeout);
+            set_always_on_top(&window_for_timeout, &x11_for_timeout);
         });
 
         Self {
             window,
             drawing_area,
             texture,
+            facing_right,
+            x11,
+            last_pos: Cell::new(None),
         }
     }
 
@@ -156,25 +187,31 @@ impl PuckWindow {
         self.drawing_area.queue_draw();
     }
 
+    /// Sets which way the sprite faces (mirrored horizontally when not
+    /// facing right). No-op, no redraw, if unchanged from last call.
+    pub fn set_facing_right(&self, facing_right: bool) {
+        if self.facing_right.get() != facing_right {
+            self.facing_right.set(facing_right);
+            self.drawing_area.queue_draw();
+        }
+    }
+
     /// Moves the window's top-left corner to `(x, y)` in screen coordinates,
     /// via a direct X11 `ConfigureWindow` request (X11-only for this slice,
     /// same rationale as `set_always_on_top`: GTK4 top-level windows have no
-    /// portable positioning API, and none is needed for Wayland here).
+    /// portable positioning API, and none is needed for Wayland here). A
+    /// no-op if `(x, y)` matches the last successfully-requested position,
+    /// since this is called every animation tick even while the sprite is
+    /// stationary (idle, landed).
     pub fn move_to(&self, x: i32, y: i32) {
-        let Some(surface) = self.window.surface() else {
+        if self.last_pos.get() == Some((x, y)) {
             return;
-        };
-        let Ok(x11_surface) = surface.downcast::<X11Surface>() else {
-            return;
-        };
-        let xid = x11_surface.xid() as u32;
-
-        let Ok((conn, _screen_num)) = RustConnection::connect(None) else {
-            eprintln!("puck: could not open X11 connection to move window");
+        }
+        let Some(state) = ensure_x11(&self.window, &self.x11) else {
             return;
         };
         let aux = x11rb::protocol::xproto::ConfigureWindowAux::new().x(x).y(y);
-        let cookie = match conn.configure_window(xid, &aux) {
+        let cookie = match state.conn.configure_window(state.xid, &aux) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("puck: failed to move window: {e:?}");
@@ -184,30 +221,26 @@ impl PuckWindow {
         if let Err(e) = cookie.check() {
             eprintln!("puck: move rejected: {e:?}");
         }
+        self.last_pos.set(Some((x, y)));
     }
 
-    /// Attaches a drag gesture to the drawing area. `on_begin`/`on_update`
-    /// fire with the drag's current point in the drawing area's own
-    /// coordinates (so callers don't need to track the drag's start point
-    /// themselves); `on_end` fires on release. Callers decide what a drag
-    /// means (this module has no knowledge of `motion::Motion`).
-    pub fn connect_drag<FBegin, FUpdate, FEnd>(
-        &self,
-        on_begin: FBegin,
-        on_update: FUpdate,
-        on_end: FEnd,
-    ) where
-        FBegin: Fn(f64, f64) + 'static,
+    /// Attaches a drag gesture to the drawing area. `on_begin` fires on
+    /// press; `on_update` fires with the drag's offset from its own start
+    /// point (GTK's `GestureDrag` semantics — not absolute or widget-local
+    /// coordinates), so callers add it to whatever position the drag
+    /// started from, not the offset itself. `on_end` fires on release.
+    pub fn connect_drag<FBegin, FUpdate, FEnd>(&self, on_begin: FBegin, on_update: FUpdate, on_end: FEnd)
+    where
+        FBegin: Fn() + 'static,
         FUpdate: Fn(f64, f64) + 'static,
         FEnd: Fn() + 'static,
     {
         let gesture = gtk4::GestureDrag::new();
-        gesture.connect_drag_begin(move |_g, x, y| {
-            on_begin(x, y);
+        gesture.connect_drag_begin(move |_g, _x, _y| {
+            on_begin();
         });
-        gesture.connect_drag_update(move |g, x, y| {
-            let (start_x, start_y) = g.start_point().unwrap_or((0.0, 0.0));
-            on_update(start_x + x, start_y + y);
+        gesture.connect_drag_update(move |_g, offset_x, offset_y| {
+            on_update(offset_x, offset_y);
         });
         gesture.connect_drag_end(move |_g, _x, _y| {
             on_end();
@@ -216,29 +249,39 @@ impl PuckWindow {
     }
 }
 
+/// Establishes the shared X11 connection on first use and caches it in
+/// `cache` for subsequent calls. Returns `None` (logging nothing itself —
+/// callers report failure in their own context) if the window has no
+/// surface yet or isn't running on X11.
+fn ensure_x11<'a>(
+    window: &ApplicationWindow,
+    cache: &'a RefCell<Option<X11State>>,
+) -> Option<std::cell::Ref<'a, X11State>> {
+    if cache.borrow().is_none() {
+        let surface = window.surface()?;
+        let x11_surface = surface.downcast::<X11Surface>().ok()?;
+        let xid = x11_surface.xid() as u32;
+        let (conn, screen_num) = RustConnection::connect(None).ok()?;
+        let root = conn.setup().roots[screen_num].root;
+        *cache.borrow_mut() = Some(X11State { conn, xid, root });
+    }
+    Some(std::cell::Ref::map(cache.borrow(), |o| {
+        o.as_ref().expect("just ensured Some above")
+    }))
+}
+
 /// Sets the EWMH `_NET_WM_STATE_ABOVE` hint on the window's underlying X11
 /// surface. GTK4 dropped `Window::set_keep_above`, so this talks to the X
 /// server directly. No-op (logs a warning) if the surface isn't X11 — e.g.
 /// running under Wayland, which is out of scope for this slice.
-fn set_always_on_top(window: &ApplicationWindow) {
-    let Some(surface) = window.surface() else {
-        eprintln!("puck: window has no surface yet, cannot set always-on-top");
+fn set_always_on_top(window: &ApplicationWindow, cache: &RefCell<Option<X11State>>) {
+    let Some(state) = ensure_x11(window, cache) else {
+        eprintln!("puck: could not establish an X11 connection for the always-on-top hint");
         return;
     };
-    let Ok(x11_surface) = surface.downcast::<X11Surface>() else {
-        eprintln!("puck: not running on X11, always-on-top is unsupported in this build");
-        return;
-    };
-    let xid = x11_surface.xid() as u32;
 
-    let Ok((conn, screen_num)) = RustConnection::connect(None) else {
-        eprintln!("puck: could not open X11 connection for always-on-top hint");
-        return;
-    };
-    let root = conn.setup().roots[screen_num].root;
-
-    let wm_state = intern_atom(&conn, "_NET_WM_STATE");
-    let wm_state_above = intern_atom(&conn, "_NET_WM_STATE_ABOVE");
+    let wm_state = intern_atom(&state.conn, "_NET_WM_STATE");
+    let wm_state_above = intern_atom(&state.conn, "_NET_WM_STATE_ABOVE");
     let (Some(wm_state), Some(wm_state_above)) = (wm_state, wm_state_above) else {
         eprintln!("puck: could not resolve EWMH atoms for always-on-top hint");
         return;
@@ -251,10 +294,10 @@ fn set_always_on_top(window: &ApplicationWindow) {
         0,
         0,
     ];
-    let event = x11rb::protocol::xproto::ClientMessageEvent::new(32, xid, wm_state, data);
-    let send_result = conn.send_event(
+    let event = x11rb::protocol::xproto::ClientMessageEvent::new(32, state.xid, wm_state, data);
+    let send_result = state.conn.send_event(
         false,
-        root,
+        state.root,
         x11rb::protocol::xproto::EventMask::SUBSTRUCTURE_REDIRECT
             | x11rb::protocol::xproto::EventMask::SUBSTRUCTURE_NOTIFY,
         event,

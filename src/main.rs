@@ -64,6 +64,7 @@ fn main() {
                 win_for_tick.set_texture(path);
                 *last_clip.borrow_mut() = frame.clip;
             }
+            win_for_tick.set_facing_right(frame.facing_right);
             win_for_tick.move_to(frame.x as i32, frame.y as i32);
             gtk4::glib::ControlFlow::Continue
         });
@@ -72,14 +73,14 @@ fn main() {
         let motion_for_drag_update = motion.clone();
         let motion_for_drag_end = motion.clone();
         win.connect_drag(
-            move |x, y| motion_for_drag_begin.borrow_mut().begin_drag(x, y),
-            move |x, y| motion_for_drag_update.borrow_mut().drag_to(x, y),
+            move || motion_for_drag_begin.borrow_mut().begin_drag(),
+            move |offset_x, offset_y| motion_for_drag_update.borrow_mut().drag_to(offset_x, offset_y),
             move || motion_for_drag_end.borrow_mut().end_drag(),
         );
 
-        // Leak the window so it isn't dropped when `connect_activate` returns;
-        // the tick-loop closure above holds its own Rc clone keeping it alive.
-        std::mem::forget(win);
+        // `win` itself drops here when `connect_activate` returns, but the
+        // tick-loop closure above holds its own `Rc` clone (`win_for_tick`)
+        // for the process's lifetime, so the window stays alive.
     });
 
     // Pass no args to GApplication itself: we've already parsed our own

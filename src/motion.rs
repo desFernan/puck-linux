@@ -31,6 +31,10 @@ pub struct Motion {
     state: State,
     x: f64,
     y: f64,
+    // Window position when the current drag started; drag_to's (offset_x,
+    // offset_y) — deltas from the gesture's own start point, not absolute
+    // coordinates — are added to this to get the new absolute position.
+    drag_anchor: (f64, f64),
     fall_velocity: f64,
     facing_right: bool,
     hitbox_width: f64,
@@ -46,6 +50,7 @@ impl Motion {
             state: State::Idle,
             x: 0.0,
             y: 0.0,
+            drag_anchor: (0.0, 0.0),
             fall_velocity: 0.0,
             facing_right: true,
             hitbox_width,
@@ -63,17 +68,21 @@ impl Motion {
         self.time_in_state = 0.0;
     }
 
-    pub fn begin_drag(&mut self, x: f64, y: f64) {
+    /// Starts a drag from the sprite's current position. `drag_to` then
+    /// takes offsets from the gesture's own start point, not absolute
+    /// coordinates, so no position is passed in here.
+    pub fn begin_drag(&mut self) {
         self.state = State::Drag;
-        self.x = x;
-        self.y = y;
+        self.drag_anchor = (self.x, self.y);
         self.fall_velocity = 0.0;
         self.time_in_state = 0.0;
     }
 
-    pub fn drag_to(&mut self, x: f64, y: f64) {
-        self.x = x;
-        self.y = y;
+    /// `offset_x`/`offset_y` are deltas from where the drag gesture began
+    /// (as GTK's `GestureDrag` reports them), not absolute coordinates.
+    pub fn drag_to(&mut self, offset_x: f64, offset_y: f64) {
+        self.x = self.drag_anchor.0 + offset_x;
+        self.y = self.drag_anchor.1 + offset_y;
     }
 
     pub fn end_drag(&mut self) {
@@ -194,15 +203,17 @@ mod tests {
     #[test]
     fn drag_moves_freely_and_release_starts_fall() {
         let mut m = Motion::new(50.0, 800.0);
-        m.begin_drag(10.0, 5.0);
+        m.begin_drag();
         let f = m.tick(0.1);
         assert_eq!(f.clip, "idle"); // dragged sprite shows idle
-        assert_eq!(f.x, 10.0);
-        assert_eq!(f.y, 5.0);
+        assert_eq!(f.x, 0.0);
+        assert_eq!(f.y, 0.0);
 
+        // offsets from the gesture's start point, not absolute coordinates
         m.drag_to(20.0, 5.0);
         let f = m.tick(0.1);
         assert_eq!(f.x, 20.0);
+        assert_eq!(f.y, 5.0);
 
         m.end_drag();
         let f = m.tick(0.1);
@@ -211,9 +222,26 @@ mod tests {
     }
 
     #[test]
+    fn drag_offset_is_relative_to_the_sprites_position_at_drag_start() {
+        let mut m = Motion::new(50.0, 800.0);
+        m.force_state_for_test(State::Walk, true);
+        let x_before_drag = m.tick(2.0).x; // walk away from x = 0 first
+        assert!(x_before_drag > 0.0);
+
+        m.begin_drag();
+        // A zero offset right after begin_drag must report the position the
+        // sprite already had - not snap to (0, 0) or to the offset itself.
+        m.drag_to(0.0, 0.0);
+        assert_eq!(m.tick(0.0).x, x_before_drag);
+
+        m.drag_to(10.0, 0.0);
+        assert_eq!(m.tick(0.0).x, x_before_drag + 10.0);
+    }
+
+    #[test]
     fn fall_lands_at_ground_and_returns_to_idle() {
         let mut m = Motion::new(50.0, 800.0);
-        m.begin_drag(0.0, 0.0);
+        m.begin_drag();
         m.end_drag();
         // Simulate a long fall; ground is y = GROUND_Y.
         for _ in 0..1000 {
