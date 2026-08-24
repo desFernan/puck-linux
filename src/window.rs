@@ -31,20 +31,50 @@ impl PuckWindow {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
+        // Send the always-on-top hint once the window is actually mapped,
+        // rather than guessing a fixed delay. Sending the EWMH
+        // _NET_WM_STATE ClientMessage synchronously right after `present()`
+        // races the window manager: `present()` only queues the X
+        // MapWindow request, and the surface isn't mapped yet at that
+        // point, so the WM silently drops the message (confirmed
+        // empirically: openbox ignores it when sent before the surface is
+        // mapped, but honors the identical message once it is).
+        //
+        // `Widget::connect_map` fires exactly when GTK's underlying
+        // GdkSurface has been mapped, which is the event that was actually
+        // missing before — not a fixed amount of wall-clock time. Verified
+        // empirically (gtk4 0.9.7, Xvfb + openbox): sending the
+        // ClientMessage from `map` with *zero* extra delay reliably
+        // results in `_NET_WM_STATE_ABOVE` being set, across repeated runs
+        // and under artificial CPU load meant to simulate a slower system.
+        //
+        // Two alternatives were tried and ruled out before landing on this:
+        // - `connect_realize`: fires even earlier than `map` (the surface
+        //   exists but isn't mapped yet) — same race as sending
+        //   synchronously after `present()`, still effectively a guess.
+        // - Setting `_NET_WM_STATE` as a plain property (`XChangeProperty`)
+        //   before mapping, which EWMH nominally allows for withdrawn
+        //   windows: empirically, GTK4 overwrites/clobbers this property
+        //   with its own state list at some point during its own map
+        //   processing, silently wiping the hint before the WM honors it.
+        //
+        // The 200ms timeout is kept as a fallback safety net in case `map`
+        // doesn't fire as expected on some other WM/compositor combination
+        // — re-sending the ClientMessage is idempotent, so both firing is
+        // harmless.
+        window.connect_map(|w| {
+            let w = w
+                .clone()
+                .downcast::<ApplicationWindow>()
+                .expect("map signal fired on an ApplicationWindow");
+            set_always_on_top(&w);
+        });
+
         window.present();
 
-        // Defer the always-on-top hint to the next main-loop iteration.
-        // `present()` only queues the X MapWindow request; sending the EWMH
-        // _NET_WM_STATE ClientMessage synchronously right after it races the
-        // window manager, which ignores state-change requests for windows it
-        // hasn't finished mapping/reparenting yet (confirmed empirically:
-        // openbox silently drops the message when sent immediately, but
-        // honors the identical message a moment later). Running it from an
-        // idle callback lets the map round-trip to the X server/WM complete
-        // first.
-        let window_for_idle = window.clone();
+        let window_for_timeout = window.clone();
         glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
-            set_always_on_top(&window_for_idle);
+            set_always_on_top(&window_for_timeout);
         });
 
         Self { window }
