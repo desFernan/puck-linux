@@ -1,5 +1,7 @@
 # Puck for Linux
 
+> Language: **English** (here) · [한국어](README.ko.md)
+
 > Not started yet. Puck currently only exists on macOS — see
 > [desFernan/puck-mac](https://github.com/desFernan/puck-mac) for the real
 > thing. This repo is a placeholder for a future Linux port.
