@@ -2,10 +2,10 @@
 
 > Language: **English** (here) · [한국어](README.ko.md)
 
-> Not started yet. Puck currently only exists on macOS — see
-> [desFernan/puck-mac](https://github.com/desFernan/puck-mac) for the real
-> thing. This repo is a placeholder for a future Linux port; everything below
-> is the intended shape, not built code.
+> Puck currently exists on macOS — see
+> [desFernan/puck-mac](https://github.com/desFernan/puck-mac) for the full
+> app. This repo is the Linux port; it currently has the pet overlay only
+> (no agent yet — see Status below).
 >
 > Platforms: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (here)
 
@@ -17,39 +17,51 @@ us. Come say hi!
 
 ## Status
 
-Nothing here yet — no code, no plan doc. [puck-windows](https://github.com/desFernan/puck-windows)
-went C# / .NET 8 + WPF with a `docs/porting-design.md` written before any
-code landed; the Linux port would start the same way: pick a stack, map
-macOS's modules to it, write the phase plan, then port.
+The pet overlay MVP is here: an always-on-top, transparent, animated
+character you can drag around, using the same avatar folder format as
+[puck-mac](https://github.com/desFernan/puck-mac). No agent features yet —
+see
+[`docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md`](docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md)
+for what's in and out of scope. The agent core, the `PuckClient`-equivalent
+window, and the socket bridge between them are follow-up work.
 
-## What a Linux port would look like
+### Build and run
 
-Mirroring [puck-mac](https://github.com/desFernan/puck-mac) and
-[puck-windows](https://github.com/desFernan/puck-windows) — same shape, once
-there's code to back it:
+Requires Rust and GTK4 development headers (`libgtk-4-dev libx11-dev` on
+Debian/Ubuntu, `gtk4-devel` + X11 devel packages on Fedora) on an X11
+session — Wayland isn't supported yet.
 
-### Build
+```sh
+cargo run -- /path/to/avatar-folder
+```
 
-A `pet-app/scripts/` build script, same as the other two ports. Stack (GTK?
-Qt? something else entirely) is not decided.
+An avatar folder needs a `manifest.json` and a PNG per clip — see
+[puck-mac's README](https://github.com/desFernan/puck-mac#a-character) for
+the manifest schema. This port reads `schema_version`, `name`, `type`,
+`hitbox`, and `clips`; `idle` is the only required clip, and `walk`/`fall`/
+`land` are used if present (falling back to `idle` otherwise).
 
 ### Test
 
-An unattended test script that exits nonzero on failure, same contract as
-`pet-app/scripts/test.sh` (macOS) and `pet-app/scripts/test.ps1` (Windows).
+```sh
+cargo test --bin puck-linux
+```
+
+(Not `cargo test --lib` — this crate is bin-only, no library target.)
 
 ### Agent providers
 
-Same design as macOS: normal chat talks to the Anthropic or OpenAI API
-directly, and the `code_editor` tool runs a vendored ACP agent under `node`.
-Not Linux-specific — this layer is meant to port with minimal changes.
+Not built yet on this port. macOS talks to the Anthropic or OpenAI API
+directly for chat, and runs a vendored ACP agent under `node` for the
+`code_editor` tool; that layer is meant to port with minimal changes once
+it's this port's turn.
 
 ### Making it your own
 
 The avatar package format (`schema_version: 1`, `manifest.json` + clip PNGs)
-is defined by puck-mac and meant to be read as-is on every port — an avatar
-folder built on macOS should drop into Linux unchanged, same as it does on
-Windows today. Field reference:
+is defined by puck-mac and read as-is here — an avatar folder built on
+macOS should drop into Linux unchanged, same as it does on Windows today.
+Field reference:
 [puck-mac's README](https://github.com/desFernan/puck-mac#a-character).
 
 ## Community
