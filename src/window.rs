@@ -1,13 +1,18 @@
 use gdk4_x11::X11Surface;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow};
+use gtk4::{Application, ApplicationWindow, DrawingArea};
+use std::cell::RefCell;
+use std::path::Path;
+use std::rc::Rc;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::rust_connection::RustConnection;
 
 pub struct PuckWindow {
     window: ApplicationWindow,
+    drawing_area: DrawingArea,
+    texture: Rc<RefCell<Option<gtk4::gdk::Texture>>>,
 }
 
 impl PuckWindow {
@@ -30,6 +35,55 @@ impl PuckWindow {
             &css,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+
+        let drawing_area = DrawingArea::new();
+        window.set_child(Some(&drawing_area));
+
+        let texture: Rc<RefCell<Option<gtk4::gdk::Texture>>> = Rc::new(RefCell::new(None));
+        let texture_for_draw = texture.clone();
+        drawing_area.set_draw_func(move |_area, ctx, _width, _height| {
+            let Some(tex) = texture_for_draw.borrow().clone() else {
+                return;
+            };
+            // gdk4-rs 0.9 has no `From<Texture> for Pixbuf` (nor any other
+            // direct texture -> drawable conversion): the only manual method
+            // on `Texture` is `download()`, which writes raw pixel bytes in
+            // Cairo's native `CAIRO_FORMAT_ARGB32` layout (premultiplied
+            // alpha, host-endian) straight into a caller-provided buffer.
+            // That layout is exactly what a `cairo::ImageSurface` in
+            // `Format::ARgb32` expects, so we download directly into one and
+            // paint it.
+            let width = tex.width();
+            let height = tex.height();
+            let mut surface = match gtk4::cairo::ImageSurface::create(
+                gtk4::cairo::Format::ARgb32,
+                width,
+                height,
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("puck: failed to create image surface for texture: {e}");
+                    return;
+                }
+            };
+            let stride = surface.stride();
+            {
+                let mut data = match surface.data() {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("puck: failed to borrow image surface data: {e}");
+                        return;
+                    }
+                };
+                tex.download(&mut data, stride as usize);
+            }
+            let _ = surface.flush();
+            if let Err(e) = ctx.set_source_surface(&surface, 0.0, 0.0) {
+                eprintln!("puck: failed to set texture as paint source: {e}");
+                return;
+            }
+            let _ = ctx.paint();
+        });
 
         // Send the always-on-top hint once the window is actually mapped,
         // rather than guessing a fixed delay. Sending the EWMH
@@ -77,11 +131,29 @@ impl PuckWindow {
             set_always_on_top(&window_for_timeout);
         });
 
-        Self { window }
+        Self {
+            window,
+            drawing_area,
+            texture,
+        }
     }
 
     pub fn gtk_window(&self) -> &ApplicationWindow {
         &self.window
+    }
+
+    /// Loads the PNG at `path`, resizes the window to its native size, and
+    /// redraws. Panics if the file can't be decoded — callers are expected
+    /// to have already validated the path exists via `avatar::load`.
+    pub fn set_texture(&self, path: &Path) {
+        let file = gtk4::gio::File::for_path(path);
+        let tex = gtk4::gdk::Texture::from_file(&file)
+            .unwrap_or_else(|e| panic!("failed to decode {}: {e}", path.display()));
+        self.window.set_default_size(tex.width(), tex.height());
+        self.drawing_area.set_content_width(tex.width());
+        self.drawing_area.set_content_height(tex.height());
+        *self.texture.borrow_mut() = Some(tex);
+        self.drawing_area.queue_draw();
     }
 }
 

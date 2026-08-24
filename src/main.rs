@@ -10,16 +10,30 @@ fn main() {
         eprintln!("usage: puck-linux <avatar-folder>");
         std::process::exit(1);
     };
-    // Consumed by avatar::load in Task 2 — kept here for now so `cargo run`
-    // has a clear usage error even before avatar loading exists.
-    let _ = avatar_path;
+    let avatar_path = std::path::PathBuf::from(avatar_path);
+
+    let loaded = match avatar::load(&avatar_path) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("puck: {e}");
+            std::process::exit(1);
+        }
+    };
 
     let app = Application::builder()
         .application_id("dev.desfernan.PuckLinux")
         .build();
 
-    app.connect_activate(|app| {
-        let _win = window::PuckWindow::new(app);
+    app.connect_activate(move |app| {
+        let win = window::PuckWindow::new(app);
+        let idle_path = loaded
+            .clips
+            .get("idle")
+            .expect("idle validated by avatar::load");
+        win.set_texture(idle_path);
+        // Leak the window so it isn't dropped when `connect_activate` returns;
+        // Task 4 replaces this with proper ownership via the motion loop.
+        std::mem::forget(win);
     });
 
     // Pass no args to GApplication itself: we've already parsed our own
