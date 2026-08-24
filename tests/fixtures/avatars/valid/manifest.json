@@ -3,5 +3,5 @@
   "name": "valid-fixture",
   "type": "sprites",
   "hitbox": { "width": 32, "height": 32 },
-  "clips": { "idle": "idle" }
+  "clips": { "idle": "idle", "walk": "walk" }
 }

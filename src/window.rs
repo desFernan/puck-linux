@@ -155,6 +155,36 @@ impl PuckWindow {
         *self.texture.borrow_mut() = Some(tex);
         self.drawing_area.queue_draw();
     }
+
+    /// Moves the window's top-left corner to `(x, y)` in screen coordinates,
+    /// via a direct X11 `ConfigureWindow` request (X11-only for this slice,
+    /// same rationale as `set_always_on_top`: GTK4 top-level windows have no
+    /// portable positioning API, and none is needed for Wayland here).
+    pub fn move_to(&self, x: i32, y: i32) {
+        let Some(surface) = self.window.surface() else {
+            return;
+        };
+        let Ok(x11_surface) = surface.downcast::<X11Surface>() else {
+            return;
+        };
+        let xid = x11_surface.xid() as u32;
+
+        let Ok((conn, _screen_num)) = RustConnection::connect(None) else {
+            eprintln!("puck: could not open X11 connection to move window");
+            return;
+        };
+        let aux = x11rb::protocol::xproto::ConfigureWindowAux::new().x(x).y(y);
+        let cookie = match conn.configure_window(xid, &aux) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("puck: failed to move window: {e:?}");
+                return;
+            }
+        };
+        if let Err(e) = cookie.check() {
+            eprintln!("puck: move rejected: {e:?}");
+        }
+    }
 }
 
 /// Sets the EWMH `_NET_WM_STATE_ABOVE` hint on the window's underlying X11

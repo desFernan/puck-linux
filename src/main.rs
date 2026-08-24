@@ -1,4 +1,5 @@
 mod avatar;
+mod motion;
 mod window;
 
 use gtk4::prelude::*;
@@ -25,14 +26,47 @@ fn main() {
         .build();
 
     app.connect_activate(move |app| {
-        let win = window::PuckWindow::new(app);
+        let win = std::rc::Rc::new(window::PuckWindow::new(app));
         let idle_path = loaded
             .clips
             .get("idle")
-            .expect("idle validated by avatar::load");
-        win.set_texture(idle_path);
+            .expect("idle validated by avatar::load")
+            .clone();
+        let walk_path = loaded.clips.get("walk").cloned();
+        win.set_texture(&idle_path);
+
+        let screen_width = gtk4::prelude::WidgetExt::display(win.gtk_window())
+            .monitors()
+            .item(0)
+            .and_then(|m| m.downcast::<gtk4::gdk::Monitor>().ok())
+            .map(|m| m.geometry().width() as f64)
+            .unwrap_or(1920.0);
+
+        let motion = std::rc::Rc::new(std::cell::RefCell::new(motion::Motion::new(
+            loaded.hitbox.width,
+            screen_width,
+        )));
+        let last_clip = std::rc::Rc::new(std::cell::RefCell::new("idle"));
+
+        let win_for_tick = win.clone();
+        let motion_for_tick = motion.clone();
+        gtk4::glib::source::timeout_add_local(std::time::Duration::from_millis(16), move || {
+            let frame = motion_for_tick.borrow_mut().tick(0.016);
+            if frame.clip != *last_clip.borrow() {
+                let path = if frame.clip == "walk" {
+                    walk_path.as_ref().unwrap_or(&idle_path)
+                } else {
+                    &idle_path
+                };
+                win_for_tick.set_texture(path);
+                *last_clip.borrow_mut() = frame.clip;
+            }
+            win_for_tick.move_to(frame.x as i32, 0);
+            gtk4::glib::ControlFlow::Continue
+        });
+
         // Leak the window so it isn't dropped when `connect_activate` returns;
-        // Task 4 replaces this with proper ownership via the motion loop.
+        // the tick-loop closure above holds its own Rc clone keeping it alive.
         std::mem::forget(win);
     });
 
