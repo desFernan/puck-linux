@@ -4,8 +4,9 @@
 
 > Puck currently exists on macOS — see
 > [desFernan/puck-mac](https://github.com/desFernan/puck-mac) for the full
-> app. This repo is the Linux port; it currently has the pet overlay only
-> (no agent yet — see Status below).
+> app. This repo is the Linux port: the pet overlay and a terminal chat
+> agent are here; the `PuckClient`-equivalent window and the socket bridge
+> between the two are follow-up work — see Status below.
 >
 > Platforms: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (here)
 
@@ -17,20 +18,28 @@ us. Come say hi!
 
 ## Status
 
-The pet overlay MVP is here: an always-on-top, transparent, animated
-character you can drag around, using the same avatar folder format as
-[puck-mac](https://github.com/desFernan/puck-mac). No agent features yet.
-The agent core, the `PuckClient`-equivalent window, and the socket bridge
-between them are follow-up work.
+Two pieces are here so far:
 
-### Build and run
+- **The pet overlay** (`puck-linux`): an always-on-top, transparent,
+  animated character you can drag around, using the same avatar folder
+  format as [puck-mac](https://github.com/desFernan/puck-mac).
+- **The agent core** (`puck-agent`): a terminal chat client talking
+  directly to the Anthropic API, with a `run_shell` tool gated behind
+  per-call approval.
+
+The two don't talk to each other yet — no socket bridge, no shared
+process. The `PuckClient`-equivalent window (chat UI, code editor,
+terminal pane) is also still follow-up work; `puck-agent` is a plain
+terminal REPL standing in for it for now.
+
+### Build and run — pet overlay
 
 Requires Rust and GTK4 development headers (`libgtk-4-dev libx11-dev` on
 Debian/Ubuntu, `gtk4-devel` + X11 devel packages on Fedora) on an X11
 session — Wayland isn't supported yet.
 
 ```sh
-cargo run -- /path/to/avatar-folder
+cargo run --bin puck-linux -- /path/to/avatar-folder
 ```
 
 An avatar folder needs a `manifest.json` and a PNG per clip — see
@@ -39,20 +48,33 @@ the manifest schema. This port reads `schema_version`, `name`, `type`,
 `hitbox`, and `clips`; `idle` is the only required clip, and `walk`/`fall`/
 `land` are used if present (falling back to `idle` otherwise).
 
+### Build and run — agent
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...   # or put it in a .env file
+cargo run --bin puck-agent
+```
+
+Reads `ANTHROPIC_API_KEY` from the environment, or from a `.env` file
+(`KEY=VALUE` per line) in the current directory if the environment
+variable isn't already set — matching puck-mac's credential file. Defaults
+to `claude-opus-5`; override with `PUCK_AGENT_MODEL`.
+
+The only tool right now is `run_shell`, which runs a shell command with the
+same permissions as the `puck-agent` process — it is **not** sandboxed or
+allowlisted. Every call is shown to you (tool name + exact input) and
+requires a `y`/`yes` confirmation before it runs; anything else declines it.
+
 ### Test
 
 ```sh
-cargo test --bin puck-linux
+cargo test --bin puck-linux   # pet overlay: parsing, animation/physics state machine
+cargo test --lib              # agent: wire format, tool-call loop, a real HTTP round trip against a local mock server
 ```
 
-(Not `cargo test --lib` — this crate is bin-only, no library target.)
-
-### Agent providers
-
-Not built yet on this port. macOS talks to the Anthropic or OpenAI API
-directly for chat, and runs a vendored ACP agent under `node` for the
-`code_editor` tool; that layer is meant to port with minimal changes once
-it's this port's turn.
+(Not `cargo test --lib --bin puck-linux` together as one invocation's `--lib`
+— they're separate targets; `cargo test` with no flags runs both plus the
+`puck-agent` binary's own, currently-empty, test target.)
 
 ### Making it your own
 

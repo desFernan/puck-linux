@@ -4,8 +4,9 @@
 
 > Puck은 현재 macOS에 존재합니다 — 전체 앱은
 > [desFernan/puck-mac](https://github.com/desFernan/puck-mac)을 보세요. 이
-> 저장소는 Linux 포팅이며, 현재는 펫 오버레이만 있습니다 (에이전트는 아직 —
-> 아래 상태 참고).
+> 저장소는 Linux 포팅이며, 펫 오버레이와 터미널 채팅 에이전트가 여기
+> 있습니다. `PuckClient`에 해당하는 창과 둘 사이의 소켓 브릿지는 이후
+> 작업입니다 — 아래 상태 참고.
 >
 > 플랫폼: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (여기)
 
@@ -16,20 +17,27 @@
 
 ## 상태
 
-펫 오버레이 MVP가 여기 있습니다: 항상 위에 떠 있고, 투명하며, 드래그해서
-움직일 수 있는 애니메이션 캐릭터로, [puck-mac](https://github.com/desFernan/puck-mac)과
-같은 아바타 폴더 포맷을 사용합니다. 에이전트 기능은 아직 없습니다. 에이전트
-코어, `PuckClient`에 해당하는 창, 그리고 둘 사이의 소켓 브릿지는 이후
-작업입니다.
+지금까지 두 조각이 있습니다:
 
-### 빌드 및 실행
+- **펫 오버레이** (`puck-linux`): 항상 위에 떠 있고, 투명하며, 드래그해서
+  움직일 수 있는 애니메이션 캐릭터로, [puck-mac](https://github.com/desFernan/puck-mac)과
+  같은 아바타 폴더 포맷을 사용합니다.
+- **에이전트 코어** (`puck-agent`): Anthropic API와 직접 통신하는 터미널
+  채팅 클라이언트로, 호출마다 승인이 필요한 `run_shell` 도구를 가지고
+  있습니다.
+
+둘은 아직 서로 통신하지 않습니다 — 소켓 브릿지도, 공유 프로세스도 없습니다.
+`PuckClient`에 해당하는 창(채팅 UI, 코드 에디터, 터미널 패널)도 아직 이후
+작업이며, 지금은 `puck-agent`가 그 자리를 대신하는 평범한 터미널 REPL입니다.
+
+### 빌드 및 실행 — 펫 오버레이
 
 Rust와 GTK4 개발 헤더(Debian/Ubuntu는 `libgtk-4-dev libx11-dev`, Fedora는
 `gtk4-devel` + X11 개발 패키지)가 필요하고, X11 세션에서 동작합니다 —
 Wayland는 아직 지원하지 않습니다.
 
 ```sh
-cargo run -- /path/to/avatar-folder
+cargo run --bin puck-linux -- /path/to/avatar-folder
 ```
 
 아바타 폴더에는 `manifest.json`과 클립별 PNG가 필요합니다 — 매니페스트
@@ -38,21 +46,32 @@ cargo run -- /path/to/avatar-folder
 읽으며, `idle`만 필수이고 `walk`/`fall`/`land`는 있으면 사용하고 없으면
 `idle`로 대체합니다.
 
+### 빌드 및 실행 — 에이전트
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...   # 또는 .env 파일에 넣기
+cargo run --bin puck-agent
+```
+
+`ANTHROPIC_API_KEY`를 환경 변수에서 읽고, 환경 변수가 없으면 현재 디렉터리의
+`.env` 파일(줄마다 `KEY=VALUE`)에서 읽습니다 — puck-mac의 자격 증명 파일과
+동일한 방식입니다. 기본 모델은 `claude-opus-5`이며, `PUCK_AGENT_MODEL`로
+바꿀 수 있습니다.
+
+지금 있는 도구는 `run_shell` 하나뿐이며, `puck-agent` 프로세스와 동일한
+권한으로 셸 명령을 실행합니다 — 샌드박스나 허용목록이 **없습니다**. 모든
+호출은 실행되기 전에 도구 이름과 정확한 입력이 표시되고 `y`/`yes` 확인이
+필요합니다 — 그 외 입력은 전부 거부로 처리됩니다.
+
 ### 테스트
 
 ```sh
-cargo test --bin puck-linux
+cargo test --bin puck-linux   # 펫 오버레이: 파싱, 애니메이션/물리 상태 머신
+cargo test --lib              # 에이전트: 와이어 포맷, 도구 호출 루프, 로컬 목 서버 대상 실제 HTTP 왕복
 ```
 
-(`cargo test --lib`이 아닙니다 — 이 크레이트는 bin 전용이라 라이브러리
-타깃이 없습니다.)
-
-### 에이전트 프로바이더
-
-이 포팅에서는 아직 만들어지지 않았습니다. macOS는 채팅을 위해 Anthropic
-또는 OpenAI API와 직접 통신하고, `code_editor` 도구를 위해 `node` 아래에서
-벤더 ACP 에이전트를 돌립니다 — 이 계층은 이 포팅 차례가 되면 최소한의
-변경으로 포팅될 예정입니다.
+(`cargo test`를 인자 없이 실행하면 위 둘과 `puck-agent` 바이너리 자체의,
+현재는 비어 있는, 테스트 타깃까지 모두 돕니다.)
 
 ### 내 것으로 만들기
 
