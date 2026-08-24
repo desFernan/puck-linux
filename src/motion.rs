@@ -218,7 +218,10 @@ mod tests {
         m.end_drag();
         let f = m.tick(0.1);
         assert_eq!(f.clip, "fall");
-        assert!(f.y > 5.0, "should have started falling (gravity increases y)");
+        assert!(
+            f.y > 5.0,
+            "should have started falling (gravity increases y)"
+        );
     }
 
     #[test]

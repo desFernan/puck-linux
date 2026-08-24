@@ -55,7 +55,11 @@ impl fmt::Display for LoadError {
                 write!(f, "clip path '{stem}' escapes the avatar package directory")
             }
             LoadError::MissingClipFile { clip, path } => {
-                write!(f, "clip '{clip}' references missing file {}", path.display())
+                write!(
+                    f,
+                    "clip '{clip}' references missing file {}",
+                    path.display()
+                )
             }
         }
     }
@@ -124,7 +128,10 @@ mod tests {
         let avatar = load(dir.path()).unwrap();
         assert_eq!(avatar.hitbox.width, 130.0);
         assert_eq!(avatar.hitbox.height, 133.0);
-        assert_eq!(avatar.clips.get("idle").unwrap(), &dir.path().join("idle.png"));
+        assert_eq!(
+            avatar.clips.get("idle").unwrap(),
+            &dir.path().join("idle.png")
+        );
     }
 
     #[test]
@@ -180,7 +187,10 @@ mod tests {
             }"#,
         );
 
-        assert!(matches!(load(dir.path()), Err(LoadError::PathEscapesPackage(_))));
+        assert!(matches!(
+            load(dir.path()),
+            Err(LoadError::PathEscapesPackage(_))
+        ));
     }
 
     #[test]

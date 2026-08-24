@@ -74,7 +74,11 @@ fn main() {
         let motion_for_drag_end = motion.clone();
         win.connect_drag(
             move || motion_for_drag_begin.borrow_mut().begin_drag(),
-            move |offset_x, offset_y| motion_for_drag_update.borrow_mut().drag_to(offset_x, offset_y),
+            move |offset_x, offset_y| {
+                motion_for_drag_update
+                    .borrow_mut()
+                    .drag_to(offset_x, offset_y)
+            },
             move || motion_for_drag_end.borrow_mut().end_drag(),
         );
 

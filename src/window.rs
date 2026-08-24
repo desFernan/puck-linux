@@ -70,17 +70,15 @@ impl PuckWindow {
             // paint it.
             let width = tex.width();
             let height = tex.height();
-            let mut surface = match gtk4::cairo::ImageSurface::create(
-                gtk4::cairo::Format::ARgb32,
-                width,
-                height,
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("puck: failed to create image surface for texture: {e}");
-                    return;
-                }
-            };
+            let mut surface =
+                match gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, width, height)
+                {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("puck: failed to create image surface for texture: {e}");
+                        return;
+                    }
+                };
             let stride = surface.stride();
             {
                 let mut data = match surface.data() {
@@ -92,7 +90,7 @@ impl PuckWindow {
                 };
                 tex.download(&mut data, stride as usize);
             }
-            let _ = surface.flush();
+            surface.flush();
 
             // The sprite is drawn facing right; walking left mirrors it
             // horizontally around its own center, matching puck-mac's
@@ -103,7 +101,9 @@ impl PuckWindow {
                 ctx.translate(width as f64, 0.0);
                 ctx.scale(-1.0, 1.0);
             }
-            let painted = ctx.set_source_surface(&surface, 0.0, 0.0).and_then(|()| ctx.paint());
+            let painted = ctx
+                .set_source_surface(&surface, 0.0, 0.0)
+                .and_then(|()| ctx.paint());
             if flip {
                 let _ = ctx.restore();
             }
@@ -229,8 +229,12 @@ impl PuckWindow {
     /// point (GTK's `GestureDrag` semantics — not absolute or widget-local
     /// coordinates), so callers add it to whatever position the drag
     /// started from, not the offset itself. `on_end` fires on release.
-    pub fn connect_drag<FBegin, FUpdate, FEnd>(&self, on_begin: FBegin, on_update: FUpdate, on_end: FEnd)
-    where
+    pub fn connect_drag<FBegin, FUpdate, FEnd>(
+        &self,
+        on_begin: FBegin,
+        on_update: FUpdate,
+        on_end: FEnd,
+    ) where
         FBegin: Fn() + 'static,
         FUpdate: Fn(f64, f64) + 'static,
         FEnd: Fn() + 'static,
