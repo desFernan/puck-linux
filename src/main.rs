@@ -33,6 +33,8 @@ fn main() {
             .expect("idle validated by avatar::load")
             .clone();
         let walk_path = loaded.clips.get("walk").cloned();
+        let fall_path = loaded.clips.get("fall").cloned();
+        let land_path = loaded.clips.get("land").cloned();
         win.set_texture(&idle_path);
 
         let screen_width = gtk4::prelude::WidgetExt::display(win.gtk_window())
@@ -53,17 +55,27 @@ fn main() {
         gtk4::glib::source::timeout_add_local(std::time::Duration::from_millis(16), move || {
             let frame = motion_for_tick.borrow_mut().tick(0.016);
             if frame.clip != *last_clip.borrow() {
-                let path = if frame.clip == "walk" {
-                    walk_path.as_ref().unwrap_or(&idle_path)
-                } else {
-                    &idle_path
+                let path = match frame.clip {
+                    "walk" => walk_path.as_ref().unwrap_or(&idle_path),
+                    "fall" => fall_path.as_ref().unwrap_or(&idle_path),
+                    "land" => land_path.as_ref().unwrap_or(&idle_path),
+                    _ => &idle_path,
                 };
                 win_for_tick.set_texture(path);
                 *last_clip.borrow_mut() = frame.clip;
             }
-            win_for_tick.move_to(frame.x as i32, 0);
+            win_for_tick.move_to(frame.x as i32, frame.y as i32);
             gtk4::glib::ControlFlow::Continue
         });
+
+        let motion_for_drag_begin = motion.clone();
+        let motion_for_drag_update = motion.clone();
+        let motion_for_drag_end = motion.clone();
+        win.connect_drag(
+            move |x, y| motion_for_drag_begin.borrow_mut().begin_drag(x, y),
+            move |x, y| motion_for_drag_update.borrow_mut().drag_to(x, y),
+            move || motion_for_drag_end.borrow_mut().end_drag(),
+        );
 
         // Leak the window so it isn't dropped when `connect_activate` returns;
         // the tick-loop closure above holds its own Rc clone keeping it alive.

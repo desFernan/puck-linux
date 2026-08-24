@@ -185,6 +185,35 @@ impl PuckWindow {
             eprintln!("puck: move rejected: {e:?}");
         }
     }
+
+    /// Attaches a drag gesture to the drawing area. `on_begin`/`on_update`
+    /// fire with the drag's current point in the drawing area's own
+    /// coordinates (so callers don't need to track the drag's start point
+    /// themselves); `on_end` fires on release. Callers decide what a drag
+    /// means (this module has no knowledge of `motion::Motion`).
+    pub fn connect_drag<FBegin, FUpdate, FEnd>(
+        &self,
+        on_begin: FBegin,
+        on_update: FUpdate,
+        on_end: FEnd,
+    ) where
+        FBegin: Fn(f64, f64) + 'static,
+        FUpdate: Fn(f64, f64) + 'static,
+        FEnd: Fn() + 'static,
+    {
+        let gesture = gtk4::GestureDrag::new();
+        gesture.connect_drag_begin(move |_g, x, y| {
+            on_begin(x, y);
+        });
+        gesture.connect_drag_update(move |g, x, y| {
+            let (start_x, start_y) = g.start_point().unwrap_or((0.0, 0.0));
+            on_update(start_x + x, start_y + y);
+        });
+        gesture.connect_drag_end(move |_g, _x, _y| {
+            on_end();
+        });
+        self.drawing_area.add_controller(gesture);
+    }
 }
 
 /// Sets the EWMH `_NET_WM_STATE_ABOVE` hint on the window's underlying X11
