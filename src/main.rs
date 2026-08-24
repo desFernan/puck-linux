@@ -1,3 +1,4 @@
+mod avatar;
 mod window;
 
 use gtk4::prelude::*;
