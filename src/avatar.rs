@@ -13,6 +13,12 @@ struct ManifestFile {
     type_: String,
     hitbox: Hitbox,
     clips: HashMap<String, String>,
+    // Named reactions (happy/thinking/sad/...) puck-mac keeps separate from
+    // `clips` in the manifest, but they're resolved into `Avatar.clips` the
+    // same way — this port has no reason to keep the two apart once paths
+    // are resolved, since both are just "name -> file stem".
+    #[serde(default)]
+    emotions: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]
@@ -80,7 +86,7 @@ pub fn load(dir: &Path) -> Result<Avatar, LoadError> {
     }
 
     let mut clips = HashMap::new();
-    for (clip_name, stem) in manifest.clips {
+    for (clip_name, stem) in manifest.clips.into_iter().chain(manifest.emotions) {
         if stem.contains("..") || Path::new(&stem).is_absolute() {
             return Err(LoadError::PathEscapesPackage(stem));
         }
@@ -212,5 +218,31 @@ mod tests {
             load(dir.path()),
             Err(LoadError::MissingClipFile { .. })
         ));
+    }
+
+    #[test]
+    fn merges_emotions_into_clips_by_resolved_file_stem() {
+        // Matches puck-mac's manifest shape: emotions are a separate map,
+        // but resolve into the same clip-name-lookup space as `clips`.
+        let dir = tempdir().unwrap();
+        write_manifest(
+            dir.path(),
+            r#"{
+                "schema_version": 1,
+                "name": "my-pet",
+                "type": "sprites",
+                "hitbox": { "width": 10, "height": 10 },
+                "clips": { "idle": "idle" },
+                "emotions": { "thinking": "pondering" }
+            }"#,
+        );
+        fs::write(dir.path().join("idle.png"), b"fake").unwrap();
+        fs::write(dir.path().join("pondering.png"), b"fake").unwrap();
+
+        let avatar = load(dir.path()).unwrap();
+        assert_eq!(
+            avatar.clips.get("thinking").unwrap(),
+            &dir.path().join("pondering.png")
+        );
     }
 }
