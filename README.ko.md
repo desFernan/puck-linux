@@ -4,9 +4,9 @@
 
 > Puck은 현재 macOS에 존재합니다 — 전체 앱은
 > [desFernan/puck-mac](https://github.com/desFernan/puck-mac)을 보세요. 이
-> 저장소는 Linux 포팅이며, 펫 오버레이와 에이전트 코어, 최소 기능의
-> `PuckClient` 대응 GUI가 여기 있습니다. 펫과 클라이언트 사이의 소켓
-> 브릿지는 아직 이후 작업입니다 — 아래 상태 참고.
+> 저장소는 Linux 포팅이며, 펫 오버레이, 에이전트 코어, 최소 기능의
+> `PuckClient` 대응 GUI, 그리고 이들을 잇는 소켓 브릿지까지 모두 여기
+> 있습니다 — puck-mac 대비 아직 얇은 부분은 아래 상태 참고.
 >
 > 플랫폼: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (여기)
 
@@ -17,7 +17,7 @@
 
 ## 상태
 
-지금까지 세 조각이 있습니다:
+지금까지 네 조각이 있습니다:
 
 - **펫 오버레이** (`puck-linux`): 항상 위에 떠 있고, 투명하며, 드래그해서
   움직일 수 있는 애니메이션 캐릭터로, [puck-mac](https://github.com/desFernan/puck-mac)과
@@ -28,9 +28,16 @@
   `PuckClient` 대응인 최소 기능 GTK4 채팅 창 `puck-client` — 승인은 터미널
   프롬프트 대신 Yes/No 다이얼로그로 뜹니다. 둘 다 puck-mac의 진짜
   `PuckClient`에 있는 코드 에디터, 터미널 패널, 워크스페이스는 없습니다.
+- **소켓 브릿지** (`src/bridge.rs`): 위 조각들을 잇습니다 — 프런트엔드가
+  요청을 처리하는 동안 펫 오버레이에게 "생각중" 클립을, 끝나면 결과에 따라
+  "행복"이나 "슬픔" 클립을 보여주라고 알려줍니다. 로드된 아바타에 해당
+  클립이 없으면 `idle`로 대체됩니다. puck-mac의 펫-클라이언트 통신
+  아키텍처의 첫 조각이고, 지금은 이 메시지 하나뿐입니다(세션 공유나 채팅
+  내용 전달 같은 건 아직 없음).
 
-이들은 아직 펫 오버레이와 통신하지 않습니다 — 소켓 브릿지도, 공유
-프로세스도 없습니다. 아직 이후 작업입니다.
+아직 포팅 안 된 것: Wayland 지원(이번 슬라이스는 의도적으로 X11 전용 — 이
+체크아웃에 추적돼 있다면 [디자인 스펙](docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md)
+참고), `PuckClient`의 코드 에디터·터미널 패널·워크스페이스.
 
 ### 빌드 및 실행 — 펫 오버레이
 
@@ -69,12 +76,16 @@ cargo run --bin puck-client   # GTK4 채팅 창 (X11 세션 필요)
 ### 테스트
 
 ```sh
-cargo test --bin puck-linux   # 펫 오버레이: 파싱, 애니메이션/물리 상태 머신
-cargo test --lib              # 에이전트: 와이어 포맷, 도구 호출 루프, 로컬 목 서버 대상 실제 HTTP 왕복
+cargo test --bin puck-linux   # 펫 오버레이: 파싱, 애니메이션/물리 상태 머신, 감정 오버라이드
+cargo test --lib              # 에이전트 + 브릿지: 와이어 포맷, 도구 호출 루프, 실제 HTTP/소켓 왕복
 ```
 
-(`cargo test`를 인자 없이 실행하면 위 둘과 `puck-agent` 바이너리 자체의,
-현재는 비어 있는, 테스트 타깃까지 모두 돕니다.)
+(`cargo test`를 인자 없이 실행하면 위 둘과 `puck-agent`/`puck-client`
+바이너리 자체의, 현재는 비어 있는, 테스트 타깃까지 모두 돕니다.)
+
+브릿지 테스트는 임시 경로의 실제 유닉스 소켓을 씁니다 — `PUCK_BRIDGE_SOCKET`을
+지정하면 펫/`puck-agent`/`puck-client`가 기본 소켓이 아닌 다른 걸 쓰게
+할 수 있습니다(여러 개를 동시에 돌릴 때 서로 안 부딪히도록).
 
 ### 내 것으로 만들기
 

@@ -4,9 +4,9 @@
 
 > Puck currently exists on macOS — see
 > [desFernan/puck-mac](https://github.com/desFernan/puck-mac) for the full
-> app. This repo is the Linux port: the pet overlay, the agent core, and a
-> minimal `PuckClient`-equivalent GUI are here; the socket bridge between
-> the pet and the client is still follow-up work — see Status below.
+> app. This repo is the Linux port: the pet overlay, the agent core, a
+> minimal `PuckClient`-equivalent GUI, and a socket bridge connecting them
+> are all here — see Status below for what's still thinner than puck-mac.
 >
 > Platforms: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (here)
 
@@ -18,7 +18,7 @@ us. Come say hi!
 
 ## Status
 
-Three pieces are here so far:
+Four pieces are here so far:
 
 - **The pet overlay** (`puck-linux`): an always-on-top, transparent,
   animated character you can drag around, using the same avatar folder
@@ -30,9 +30,18 @@ Three pieces are here so far:
   `PuckClient`-equivalent) — approvals show as a Yes/No dialog instead of a
   terminal prompt. Neither has the code editor, terminal pane, or
   workspaces puck-mac's real `PuckClient` has.
+- **A socket bridge** (`src/bridge.rs`) connecting the pieces above: while
+  either front end is working on a request it tells the pet overlay to
+  show a "thinking" clip, then "happy" or "sad" depending on how the turn
+  ended — the pet falls back to `idle` if the loaded avatar doesn't define
+  that clip. This is the first slice of puck-mac's pet-talks-to-client
+  architecture; only this one message exists so far, nothing richer yet
+  (no shared sessions, no forwarding chat into the pet, etc.).
 
-None of these talk to the pet overlay yet — no socket bridge, no shared
-process. That's still follow-up work.
+Not yet ported: Wayland support (X11 only, by design for this slice — see
+the [design spec](docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md)
+if it's tracked in this checkout), and `PuckClient`'s code editor, terminal
+pane, and workspaces.
 
 ### Build and run — pet overlay
 
@@ -72,13 +81,17 @@ dialog in `puck-client`.
 ### Test
 
 ```sh
-cargo test --bin puck-linux   # pet overlay: parsing, animation/physics state machine
-cargo test --lib              # agent: wire format, tool-call loop, a real HTTP round trip against a local mock server
+cargo test --bin puck-linux   # pet overlay: parsing, animation/physics state machine, emotion override
+cargo test --lib              # agent + bridge: wire format, tool-call loop, real HTTP/socket round trips
 ```
 
 (Not `cargo test --lib --bin puck-linux` together as one invocation's `--lib`
 — they're separate targets; `cargo test` with no flags runs both plus the
-`puck-agent` binary's own, currently-empty, test target.)
+`puck-agent`/`puck-client` binaries' own, currently-empty, test targets.)
+
+Bridge tests use a real Unix socket at a temp path — set `PUCK_BRIDGE_SOCKET`
+to point the pet, `puck-agent`, or `puck-client` at a non-default socket
+(useful for running more than one of each at once without them colliding).
 
 ### Making it your own
 
