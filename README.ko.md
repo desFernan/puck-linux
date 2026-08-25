@@ -4,9 +4,9 @@
 
 > Puck은 현재 macOS에 존재합니다 — 전체 앱은
 > [desFernan/puck-mac](https://github.com/desFernan/puck-mac)을 보세요. 이
-> 저장소는 Linux 포팅이며, 펫 오버레이와 터미널 채팅 에이전트가 여기
-> 있습니다. `PuckClient`에 해당하는 창과 둘 사이의 소켓 브릿지는 이후
-> 작업입니다 — 아래 상태 참고.
+> 저장소는 Linux 포팅이며, 펫 오버레이와 에이전트 코어, 최소 기능의
+> `PuckClient` 대응 GUI가 여기 있습니다. 펫과 클라이언트 사이의 소켓
+> 브릿지는 아직 이후 작업입니다 — 아래 상태 참고.
 >
 > 플랫폼: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (여기)
 
@@ -17,18 +17,20 @@
 
 ## 상태
 
-지금까지 두 조각이 있습니다:
+지금까지 세 조각이 있습니다:
 
 - **펫 오버레이** (`puck-linux`): 항상 위에 떠 있고, 투명하며, 드래그해서
   움직일 수 있는 애니메이션 캐릭터로, [puck-mac](https://github.com/desFernan/puck-mac)과
   같은 아바타 폴더 포맷을 사용합니다.
-- **에이전트 코어** (`puck-agent`): Anthropic API와 직접 통신하는 터미널
-  채팅 클라이언트로, 호출마다 승인이 필요한 `run_shell` 도구를 가지고
-  있습니다.
+- **에이전트 코어** (`src/agent/`): Anthropic API와 직접 통신하며, 호출마다
+  승인이 필요한 `run_shell` 도구를 가지고 있습니다.
+- **에이전트용 프런트엔드 둘**: 터미널 REPL인 `puck-agent`와, 지금의
+  `PuckClient` 대응인 최소 기능 GTK4 채팅 창 `puck-client` — 승인은 터미널
+  프롬프트 대신 Yes/No 다이얼로그로 뜹니다. 둘 다 puck-mac의 진짜
+  `PuckClient`에 있는 코드 에디터, 터미널 패널, 워크스페이스는 없습니다.
 
-둘은 아직 서로 통신하지 않습니다 — 소켓 브릿지도, 공유 프로세스도 없습니다.
-`PuckClient`에 해당하는 창(채팅 UI, 코드 에디터, 터미널 패널)도 아직 이후
-작업이며, 지금은 `puck-agent`가 그 자리를 대신하는 평범한 터미널 REPL입니다.
+이들은 아직 펫 오버레이와 통신하지 않습니다 — 소켓 브릿지도, 공유
+프로세스도 없습니다. 아직 이후 작업입니다.
 
 ### 빌드 및 실행 — 펫 오버레이
 
@@ -50,18 +52,19 @@ cargo run --bin puck-linux -- /path/to/avatar-folder
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...   # 또는 .env 파일에 넣기
-cargo run --bin puck-agent
+cargo run --bin puck-agent    # 터미널 채팅
+cargo run --bin puck-client   # GTK4 채팅 창 (X11 세션 필요)
 ```
 
-`ANTHROPIC_API_KEY`를 환경 변수에서 읽고, 환경 변수가 없으면 현재 디렉터리의
-`.env` 파일(줄마다 `KEY=VALUE`)에서 읽습니다 — puck-mac의 자격 증명 파일과
-동일한 방식입니다. 기본 모델은 `claude-opus-5`이며, `PUCK_AGENT_MODEL`로
-바꿀 수 있습니다.
+둘 다 `ANTHROPIC_API_KEY`를 환경 변수에서 읽고, 환경 변수가 없으면 현재
+디렉터리의 `.env` 파일(줄마다 `KEY=VALUE`)에서 읽습니다 — puck-mac의 자격
+증명 파일과 동일한 방식입니다. 둘 다 기본 모델은 `claude-opus-5`이며,
+`PUCK_AGENT_MODEL`로 바꿀 수 있습니다.
 
-지금 있는 도구는 `run_shell` 하나뿐이며, `puck-agent` 프로세스와 동일한
-권한으로 셸 명령을 실행합니다 — 샌드박스나 허용목록이 **없습니다**. 모든
-호출은 실행되기 전에 도구 이름과 정확한 입력이 표시되고 `y`/`yes` 확인이
-필요합니다 — 그 외 입력은 전부 거부로 처리됩니다.
+지금 있는 도구는 `run_shell` 하나뿐이며, 에이전트 프로세스와 동일한 권한으로
+셸 명령을 실행합니다 — 샌드박스나 허용목록이 **없습니다**. 모든 호출은
+실행되기 전에 승인이 필요하고 도구 이름과 정확한 입력을 보여줍니다 —
+`puck-agent`는 `y`/`yes` 프롬프트로, `puck-client`는 Yes/No 다이얼로그로.
 
 ### 테스트
 

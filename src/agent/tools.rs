@@ -7,8 +7,9 @@ pub struct ToolOutcome {
 
 /// A tool the agent can call. Every call goes through the approval gate in
 /// `turn::run_turn` before `run` executes — a handler is never responsible
-/// for its own approval.
-pub trait ToolHandler {
+/// for its own approval. `Send` so a GUI client can own its tool set on a
+/// background worker thread (see `puck-client`).
+pub trait ToolHandler: Send {
     fn definition(&self) -> ToolDefinition;
     fn run(&self, input: &serde_json::Value) -> ToolOutcome;
 }

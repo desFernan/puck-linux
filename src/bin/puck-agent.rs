@@ -1,29 +1,7 @@
-use puck_linux::agent::{Approver, Client, RunShell, Session, ToolHandler};
+use puck_linux::agent::{load_dotenv, Approver, Client, RunShell, Session, ToolHandler};
 use std::io::{self, BufRead, Write};
 
 const DEFAULT_MODEL: &str = "claude-opus-5";
-
-/// Reads simple `KEY=VALUE` lines from `.env` in the current directory, if
-/// present, and sets each as an environment variable unless it's already
-/// set. Not a full dotenv parser (no quoting, no multiline values) —
-/// matches puck-mac's documented `.env` credential file for this MVP.
-fn load_dotenv() {
-    let Ok(contents) = std::fs::read_to_string(".env") else {
-        return;
-    };
-    for line in contents.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            let key = key.trim();
-            if std::env::var_os(key).is_none() {
-                std::env::set_var(key, value.trim());
-            }
-        }
-    }
-}
 
 struct TerminalApprover;
 
@@ -41,7 +19,7 @@ impl Approver for TerminalApprover {
 }
 
 fn main() {
-    load_dotenv();
+    load_dotenv(std::path::Path::new(".env"));
 
     let api_key = match std::env::var("ANTHROPIC_API_KEY") {
         Ok(k) if !k.is_empty() => k,

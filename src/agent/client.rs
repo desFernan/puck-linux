@@ -117,6 +117,7 @@ pub trait MessagesApi {
     ) -> Result<MessagesResponse, ClientError>;
 }
 
+#[derive(Clone)]
 pub struct Client {
     http: reqwest::blocking::Client,
     api_key: String,
