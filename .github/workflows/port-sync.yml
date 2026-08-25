@@ -1,0 +1,57 @@
+name: Port Sync
+
+# On every push to main, tell the sibling platform repos that new commits
+# landed here so they can be ported. One open "needs-port-from-<this repo>"
+# issue per source repo per target: new commits get appended to it as a
+# comment until someone closes it (i.e. porting is done), at which point the
+# next push starts a fresh issue.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [puck-mac, puck-windows]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build commit summary
+        id: commits
+        run: |
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.event.after }}"
+          ZERO="0000000000000000000000000000000000000000"
+          if [ "$BEFORE" = "$ZERO" ]; then
+            LOG=$(git log -1 --pretty=format:'- [`%h`](https://github.com/${{ github.repository }}/commit/%H) %s' "$AFTER")
+          else
+            LOG=$(git log "$BEFORE..$AFTER" --pretty=format:'- [`%h`](https://github.com/${{ github.repository }}/commit/%H) %s')
+          fi
+          if [ -z "$LOG" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$LOG" > /tmp/port-sync-body.md
+
+      - name: Find or create tracking issue
+        if: steps.commits.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PORT_SYNC_TOKEN }}
+        run: |
+          LABEL="needs-port-from-${{ github.event.repository.name }}"
+          TARGET="desFernan/${{ matrix.target }}"
+          NUM=$(gh issue list --repo "$TARGET" --label "$LABEL" --state open --json number -q '.[0].number')
+          if [ -z "$NUM" ]; then
+            gh issue create --repo "$TARGET" \
+              --title "Port from ${{ github.event.repository.name }}: new commits" \
+              --label "$LABEL" \
+              --body-file /tmp/port-sync-body.md
+          else
+            gh issue comment "$NUM" --repo "$TARGET" --body-file /tmp/port-sync-body.md
+          fi
