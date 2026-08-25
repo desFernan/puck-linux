@@ -53,10 +53,15 @@ fn main() {
         }
 
         session.push_user_text(line);
+        puck_linux::bridge::notify_emotion("thinking");
         let result =
             puck_linux::agent::run_turn(&client, &mut session, &tools, &mut approver, |text| {
                 println!("{text}");
             });
+        match &result {
+            Ok(()) => puck_linux::bridge::notify_emotion("happy"),
+            Err(_) => puck_linux::bridge::notify_emotion("sad"),
+        }
         if let Err(e) = result {
             eprintln!("puck-agent: {e}");
         }
