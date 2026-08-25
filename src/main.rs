@@ -37,16 +37,21 @@ fn main() {
         win.set_display_size(loaded.hitbox.width as i32, loaded.hitbox.height as i32);
         win.set_texture(&idle_path);
 
-        let screen_width = gtk4::prelude::WidgetExt::display(win.gtk_window())
+        let monitor_size = gtk4::prelude::WidgetExt::display(win.gtk_window())
             .monitors()
             .item(0)
             .and_then(|m| m.downcast::<gtk4::gdk::Monitor>().ok())
-            .map(|m| m.geometry().width() as f64)
-            .unwrap_or(1920.0);
+            .map(|m| {
+                let geometry = m.geometry();
+                (geometry.width() as f64, geometry.height() as f64)
+            });
+        let (screen_width, screen_height) = monitor_size.unwrap_or((1920.0, 1080.0));
 
         let motion = std::rc::Rc::new(std::cell::RefCell::new(motion::Motion::new(
             loaded.hitbox.width,
+            loaded.hitbox.height,
             screen_width,
+            screen_height,
         )));
         let emotion = std::rc::Rc::new(std::cell::RefCell::new(emotion::EmotionOverride::new()));
         let last_clip: std::rc::Rc<std::cell::RefCell<String>> =

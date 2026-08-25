@@ -1,14 +1,5 @@
 const WALK_SPEED_PX_PER_SEC: f64 = 40.0;
 const GRAVITY_PX_PER_SEC2: f64 = 800.0;
-// Screen-down coordinates: `y` is the sprite's on-screen vertical position,
-// increasing downward. `begin_drag` sets `y` directly from the cursor, and a
-// fall increases it (moving down the screen) until it reaches `GROUND_Y`,
-// which stands in for the ground the sprite lands on. Motion doesn't track
-// the real monitor height (only `screen_width`, for walk turnaround), so
-// this is a fixed fall distance rather than the actual bottom of the
-// screen — good enough for this MVP slice; wiring the real screen height
-// through is a natural follow-up if the fixed distance ever looks wrong.
-const GROUND_Y: f64 = 500.0;
 const LAND_DURATION_SECS: f64 = 0.3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,22 +30,36 @@ pub struct Motion {
     facing_right: bool,
     hitbox_width: f64,
     screen_width: f64,
+    // The sprite's resting y (top-left corner) — screen_height minus the
+    // sprite's own height, so its bottom edge sits on the screen's bottom
+    // edge. Idle/Walk hold y here; a Fall ends (lands) when y reaches it
+    // too, so walking and landing share the same ground instead of the
+    // sprite drifting at y=0 (visually "floating" at the top of the
+    // screen) while only falls knew about a ground level.
+    ground_y: f64,
     time_in_state: f64,
     idle_duration: f64,
     walk_duration: f64,
 }
 
 impl Motion {
-    pub fn new(hitbox_width: f64, screen_width: f64) -> Self {
+    pub fn new(
+        hitbox_width: f64,
+        hitbox_height: f64,
+        screen_width: f64,
+        screen_height: f64,
+    ) -> Self {
+        let ground_y = (screen_height - hitbox_height).max(0.0);
         Self {
             state: State::Idle,
             x: 0.0,
-            y: 0.0,
+            y: ground_y,
             drag_anchor: (0.0, 0.0),
             fall_velocity: 0.0,
             facing_right: true,
             hitbox_width,
             screen_width,
+            ground_y,
             time_in_state: 0.0,
             idle_duration: 3.0,
             walk_duration: 4.0,
@@ -135,8 +140,8 @@ impl Motion {
             State::Fall => {
                 self.fall_velocity += GRAVITY_PX_PER_SEC2 * dt_secs;
                 self.y += self.fall_velocity * dt_secs;
-                if self.y >= GROUND_Y {
-                    self.y = GROUND_Y;
+                if self.y >= self.ground_y {
+                    self.y = self.ground_y;
                     self.state = State::Land;
                     self.time_in_state = 0.0;
                 }
@@ -170,7 +175,7 @@ mod tests {
 
     #[test]
     fn starts_idle_at_x_zero() {
-        let mut m = Motion::new(50.0, 800.0);
+        let mut m = Motion::new(50.0, 50.0, 800.0, 50.0);
         let f = m.tick(0.0);
         assert_eq!(f.clip, "idle");
         assert_eq!(f.x, 0.0);
@@ -178,7 +183,7 @@ mod tests {
 
     #[test]
     fn walking_moves_right_and_faces_right() {
-        let mut m = Motion::new(50.0, 800.0);
+        let mut m = Motion::new(50.0, 50.0, 800.0, 50.0);
         m.force_state_for_test(State::Walk, true);
         let f = m.tick(1.0);
         assert_eq!(f.clip, "walk");
@@ -187,8 +192,20 @@ mod tests {
     }
 
     #[test]
+    fn starts_and_stays_at_the_screens_ground_not_the_top() {
+        // hitbox 50 tall, screen 200 tall -> ground_y = 150 (sprite's
+        // bottom edge sits on the screen's bottom edge). Idle and Walk
+        // must both hold y there, not drift to 0 (the top of the screen).
+        let mut m = Motion::new(50.0, 50.0, 800.0, 200.0);
+        assert_eq!(m.tick(0.0).y, 150.0);
+
+        m.force_state_for_test(State::Walk, true);
+        assert_eq!(m.tick(1.0).y, 150.0);
+    }
+
+    #[test]
     fn turns_around_at_right_edge() {
-        let mut m = Motion::new(50.0, 100.0);
+        let mut m = Motion::new(50.0, 50.0, 100.0, 50.0);
         m.force_state_for_test(State::Walk, true);
         // screen_width 100, hitbox 50 -> right edge for sprite's left-x is 50.
         // At 40px/s that's reached in 1.25s; walk_duration is 4s, so staying
@@ -208,31 +225,36 @@ mod tests {
 
     #[test]
     fn drag_moves_freely_and_release_starts_fall() {
-        let mut m = Motion::new(50.0, 800.0);
+        // ground_y = 750 here (screen 800 tall, hitbox 50). The sprite
+        // starts standing on it; dragging up (negative y offset) lifts it
+        // off the ground so releasing it has room to actually fall.
+        let mut m = Motion::new(50.0, 50.0, 800.0, 800.0);
+        let ground_y = 750.0;
+
         m.begin_drag();
         let f = m.tick(0.1);
         assert_eq!(f.clip, "idle"); // dragged sprite shows idle
         assert_eq!(f.x, 0.0);
-        assert_eq!(f.y, 0.0);
+        assert_eq!(f.y, ground_y);
 
         // offsets from the gesture's start point, not absolute coordinates
-        m.drag_to(20.0, 5.0);
+        m.drag_to(20.0, -100.0);
         let f = m.tick(0.1);
         assert_eq!(f.x, 20.0);
-        assert_eq!(f.y, 5.0);
+        assert_eq!(f.y, ground_y - 100.0);
 
         m.end_drag();
         let f = m.tick(0.1);
         assert_eq!(f.clip, "fall");
         assert!(
-            f.y > 5.0,
-            "should have started falling (gravity increases y)"
+            f.y > ground_y - 100.0,
+            "should have started falling back down (gravity increases y)"
         );
     }
 
     #[test]
     fn drag_offset_is_relative_to_the_sprites_position_at_drag_start() {
-        let mut m = Motion::new(50.0, 800.0);
+        let mut m = Motion::new(50.0, 50.0, 800.0, 50.0);
         m.force_state_for_test(State::Walk, true);
         let x_before_drag = m.tick(2.0).x; // walk away from x = 0 first
         assert!(x_before_drag > 0.0);
@@ -249,10 +271,10 @@ mod tests {
 
     #[test]
     fn fall_lands_at_ground_and_returns_to_idle() {
-        let mut m = Motion::new(50.0, 800.0);
+        let mut m = Motion::new(50.0, 50.0, 800.0, 800.0);
         m.begin_drag();
         m.end_drag();
-        // Simulate a long fall; ground is y = GROUND_Y.
+        // Simulate a long fall; ground is y = ground_y (750 here).
         for _ in 0..1000 {
             let f = m.tick(0.05);
             if f.clip == "idle" {
