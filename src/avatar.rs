@@ -24,9 +24,6 @@ struct ManifestFile {
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Hitbox {
     pub width: f64,
-    // Read from the manifest for schema completeness (puck-mac clicks/throws
-    // by it); this MVP slice only needs width, for walk-edge turnaround.
-    #[allow(dead_code)]
     pub height: f64,
 }
 

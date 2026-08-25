@@ -24,6 +24,7 @@ pub struct PuckWindow {
     drawing_area: DrawingArea,
     texture: Rc<RefCell<Option<gtk4::gdk::Texture>>>,
     facing_right: Rc<Cell<bool>>,
+    display_size: Rc<Cell<(i32, i32)>>,
     x11: Rc<RefCell<Option<X11State>>>,
     last_pos: Cell<Option<(i32, i32)>>,
 }
@@ -48,14 +49,15 @@ impl PuckWindow {
             &css,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
-
         let drawing_area = DrawingArea::new();
         window.set_child(Some(&drawing_area));
 
         let texture: Rc<RefCell<Option<gtk4::gdk::Texture>>> = Rc::new(RefCell::new(None));
         let facing_right: Rc<Cell<bool>> = Rc::new(Cell::new(true));
+        let display_size: Rc<Cell<(i32, i32)>> = Rc::new(Cell::new((200, 200)));
         let texture_for_draw = texture.clone();
         let facing_right_for_draw = facing_right.clone();
+        let display_size_for_draw = display_size.clone();
         drawing_area.set_draw_func(move |_area, ctx, _width, _height| {
             let Some(tex) = texture_for_draw.borrow().clone() else {
                 return;
@@ -92,21 +94,33 @@ impl PuckWindow {
             }
             surface.flush();
 
+            // Scale the (often much larger, e.g. source art at ~1200px)
+            // decoded texture down to the avatar's declared display size —
+            // native pixel dimensions and the manifest's `hitbox` size are
+            // two different things; drawing 1:1 at native resolution made
+            // the window balloon to the source art's actual pixel size.
+            let (target_w, target_h) = display_size_for_draw.get();
+            let _ = ctx.save();
+
             // The sprite is drawn facing right; walking left mirrors it
             // horizontally around its own center, matching puck-mac's
-            // sprite convention.
+            // sprite convention. Flip in target (already-scaled) space so
+            // the mirror axis is the display width, not the source
+            // texture's native width.
             let flip = !facing_right_for_draw.get();
             if flip {
-                let _ = ctx.save();
-                ctx.translate(width as f64, 0.0);
+                ctx.translate(target_w as f64, 0.0);
                 ctx.scale(-1.0, 1.0);
             }
+            ctx.scale(
+                target_w as f64 / width as f64,
+                target_h as f64 / height as f64,
+            );
+
             let painted = ctx
                 .set_source_surface(&surface, 0.0, 0.0)
                 .and_then(|()| ctx.paint());
-            if flip {
-                let _ = ctx.restore();
-            }
+            let _ = ctx.restore();
             if let Err(e) = painted {
                 eprintln!("puck: failed to paint texture: {e}");
             }
@@ -164,6 +178,7 @@ impl PuckWindow {
             drawing_area,
             texture,
             facing_right,
+            display_size,
             x11,
             last_pos: Cell::new(None),
         }
@@ -173,16 +188,27 @@ impl PuckWindow {
         &self.window
     }
 
-    /// Loads the PNG at `path`, resizes the window to its native size, and
-    /// redraws. Panics if the file can't be decoded — callers are expected
+    /// Sets the window/drawing-area size the avatar is displayed at —
+    /// the manifest's `hitbox`, not any clip's native pixel resolution
+    /// (source art can be far higher-resolution than the intended
+    /// on-screen size). Call once after loading the avatar, before the
+    /// first `set_texture`.
+    pub fn set_display_size(&self, width: i32, height: i32) {
+        self.display_size.set((width, height));
+        self.window.set_default_size(width, height);
+        self.drawing_area.set_content_width(width);
+        self.drawing_area.set_content_height(height);
+        self.drawing_area.queue_draw();
+    }
+
+    /// Loads the PNG at `path` and redraws, scaled to fit whatever size
+    /// `set_display_size` last set (or the 200x200 default if it was never
+    /// called). Panics if the file can't be decoded — callers are expected
     /// to have already validated the path exists via `avatar::load`.
     pub fn set_texture(&self, path: &Path) {
         let file = gtk4::gio::File::for_path(path);
         let tex = gtk4::gdk::Texture::from_file(&file)
             .unwrap_or_else(|e| panic!("failed to decode {}: {e}", path.display()));
-        self.window.set_default_size(tex.width(), tex.height());
-        self.drawing_area.set_content_width(tex.width());
-        self.drawing_area.set_content_height(tex.height());
         *self.texture.borrow_mut() = Some(tex);
         self.drawing_area.queue_draw();
     }

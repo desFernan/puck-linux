@@ -34,6 +34,7 @@ fn main() {
             .get("idle")
             .expect("idle validated by avatar::load")
             .clone();
+        win.set_display_size(loaded.hitbox.width as i32, loaded.hitbox.height as i32);
         win.set_texture(&idle_path);
 
         let screen_width = gtk4::prelude::WidgetExt::display(win.gtk_window())
