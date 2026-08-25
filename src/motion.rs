@@ -80,9 +80,15 @@ impl Motion {
 
     /// `offset_x`/`offset_y` are deltas from where the drag gesture began
     /// (as GTK's `GestureDrag` reports them), not absolute coordinates.
-    pub fn drag_to(&mut self, offset_x: f64, offset_y: f64) {
+    /// Returns the new absolute position so callers can move the window
+    /// immediately, without waiting for the next animation tick — a drag
+    /// gesture can report updates faster than the tick interval, and
+    /// waiting for the next tick to move the window makes dragging feel
+    /// laggy.
+    pub fn drag_to(&mut self, offset_x: f64, offset_y: f64) -> (f64, f64) {
         self.x = self.drag_anchor.0 + offset_x;
         self.y = self.drag_anchor.1 + offset_y;
+        (self.x, self.y)
     }
 
     pub fn end_drag(&mut self) {

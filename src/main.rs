@@ -79,12 +79,17 @@ fn main() {
         let motion_for_drag_begin = motion.clone();
         let motion_for_drag_update = motion.clone();
         let motion_for_drag_end = motion.clone();
+        let win_for_drag_update = win.clone();
         win.connect_drag(
             move || motion_for_drag_begin.borrow_mut().begin_drag(),
             move |offset_x, offset_y| {
-                motion_for_drag_update
+                let (x, y) = motion_for_drag_update
                     .borrow_mut()
-                    .drag_to(offset_x, offset_y)
+                    .drag_to(offset_x, offset_y);
+                // Move the window right away rather than waiting for the
+                // next 16ms tick — GestureDrag can report updates faster
+                // than that, and waiting made dragging feel laggy.
+                win_for_drag_update.move_to(x as i32, y as i32);
             },
             move || motion_for_drag_end.borrow_mut().end_drag(),
         );
