@@ -62,14 +62,13 @@ fn spawn_worker(
         let mut session = Session::new();
         for command in cmd_rx {
             let WorkerCommand::UserMessage(text) = command;
-            session.push_user_text(&text);
 
             let mut approver = GtkApprover {
                 ui_tx: ui_tx.clone(),
             };
             let text_tx = ui_tx.clone();
             puck_linux::bridge::notify_emotion("thinking");
-            let result = run_turn(&client, &mut session, &tools, &mut approver, |t| {
+            let result = run_turn(&client, &mut session, &tools, &mut approver, &text, |t| {
                 let _ = text_tx.send_blocking(UiEvent::AssistantText(t.to_string()));
             });
             match &result {

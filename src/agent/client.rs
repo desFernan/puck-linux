@@ -135,7 +135,17 @@ impl Client {
     /// callers should use `new`.
     pub fn with_base_url(api_url: String, api_key: String, model: String) -> Self {
         Self {
-            http: reqwest::blocking::Client::new(),
+            // Without a timeout, a stalled connection blocks `send` (and
+            // so the agent's whole worker thread, and so the
+            // conversation) forever — the same class of hang `RunShell`
+            // guards against for commands, just on the network side.
+            // 120s is generous for a non-streaming request (this MVP
+            // doesn't stream) with up to 16000 output tokens, while still
+            // giving up eventually instead of hanging indefinitely.
+            http: reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(120))
+                .build()
+                .expect("building the HTTP client with just a timeout set should never fail"),
             api_key,
             model,
             api_url,

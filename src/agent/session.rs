@@ -1,4 +1,4 @@
-use super::client::{ContentBlock, Message};
+use super::client::Message;
 
 /// Conversation history for one chat session. The Messages API is
 /// stateless — every request resends the full transcript — so this is
@@ -18,27 +18,18 @@ impl Session {
         &self.messages
     }
 
-    pub fn push_user_text(&mut self, text: &str) {
-        self.messages.push(Message {
-            role: "user".to_string(),
-            content: vec![ContentBlock::Text {
-                text: text.to_string(),
-            }],
-        });
-    }
-
-    pub fn push_assistant(&mut self, content: Vec<ContentBlock>) {
-        self.messages.push(Message {
-            role: "assistant".to_string(),
-            content,
-        });
-    }
-
-    pub fn push_tool_results(&mut self, content: Vec<ContentBlock>) {
-        self.messages.push(Message {
-            role: "user".to_string(),
-            content,
-        });
+    /// Replaces the full history in one atomic step. `turn::run_turn`
+    /// builds a whole turn (the user's message, any tool round trips, the
+    /// final reply) on a private copy and calls this exactly once, on
+    /// success or on giving up — never incrementally as the turn
+    /// progresses. A mid-turn network failure after only some of a turn's
+    /// messages were pushed would otherwise leave the real session with an
+    /// unpaired `tool_use` or a trailing user message with no reply, and
+    /// the Messages API rejects a conversation shaped like that outright,
+    /// on every future request — permanently breaking the session until
+    /// the process restarts.
+    pub fn commit(&mut self, messages: Vec<Message>) {
+        self.messages = messages;
     }
 }
 
@@ -51,40 +42,41 @@ impl Default for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::client::ContentBlock;
 
     #[test]
-    fn push_user_text_appends_a_user_message() {
-        let mut s = Session::new();
-        s.push_user_text("hi");
-        assert_eq!(s.messages().len(), 1);
-        assert_eq!(s.messages()[0].role, "user");
-        assert_eq!(
-            s.messages()[0].content,
-            vec![ContentBlock::Text {
-                text: "hi".to_string()
-            }]
-        );
+    fn starts_empty() {
+        let s = Session::new();
+        assert!(s.messages().is_empty());
     }
 
     #[test]
-    fn push_assistant_and_tool_results_preserve_order() {
+    fn commit_replaces_the_full_history_atomically() {
         let mut s = Session::new();
-        s.push_user_text("run ls");
-        s.push_assistant(vec![ContentBlock::ToolUse {
-            id: "toolu_1".to_string(),
-            name: "run_shell".to_string(),
-            input: serde_json::json!({"command": "ls"}),
+        s.commit(vec![Message {
+            role: "user".to_string(),
+            content: vec![ContentBlock::Text {
+                text: "hi".to_string(),
+            }],
         }]);
-        s.push_tool_results(vec![ContentBlock::ToolResult {
-            tool_use_id: "toolu_1".to_string(),
-            content: "file.txt".to_string(),
-            is_error: None,
-        }]);
+        assert_eq!(s.messages().len(), 1);
 
-        let msgs = s.messages();
-        assert_eq!(msgs.len(), 3);
-        assert_eq!(msgs[0].role, "user");
-        assert_eq!(msgs[1].role, "assistant");
-        assert_eq!(msgs[2].role, "user");
+        // A later commit fully replaces the prior one, not appends to it.
+        s.commit(vec![
+            Message {
+                role: "user".to_string(),
+                content: vec![ContentBlock::Text {
+                    text: "hi".to_string(),
+                }],
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: vec![ContentBlock::Text {
+                    text: "hello".to_string(),
+                }],
+            },
+        ]);
+        assert_eq!(s.messages().len(), 2);
+        assert_eq!(s.messages()[1].role, "assistant");
     }
 }
