@@ -29,6 +29,7 @@ pub struct Motion {
     fall_velocity: f64,
     facing_right: bool,
     hitbox_width: f64,
+    hitbox_height: f64,
     screen_width: f64,
     // The sprite's resting y (top-left corner) — screen_height minus the
     // sprite's own height, so its bottom edge sits on the screen's bottom
@@ -58,11 +59,43 @@ impl Motion {
             fall_velocity: 0.0,
             facing_right: true,
             hitbox_width,
+            hitbox_height,
             screen_width,
             ground_y,
             time_in_state: 0.0,
             idle_duration: 3.0,
             walk_duration: 4.0,
+        }
+    }
+
+    /// Recomputes `ground_y` for a new screen size (a display was
+    /// reconfigured — resolution changed, a monitor was added/removed).
+    /// If the sprite was standing on the ground when this happens:
+    /// - a shorter screen means the new floor rose up past it, and
+    ///   nothing falls *upward*, so it's pulled directly onto the new
+    ///   floor;
+    /// - a taller screen means the sprite is still inside the visible
+    ///   area but now has nothing under it, so it's dropped into `Fall`
+    ///   and gravity carries it down to the new floor the normal way.
+    ///
+    /// Dragging or already-falling sprites are left alone — the fall
+    /// already lands on whatever `ground_y` is by the time it gets there.
+    pub fn update_screen_size(&mut self, screen_width: f64, screen_height: f64) {
+        let new_ground_y = (screen_height - self.hitbox_height).max(0.0);
+        self.screen_width = screen_width;
+
+        let was_grounded = matches!(self.state, State::Idle | State::Walk | State::Land)
+            && self.y >= self.ground_y;
+        self.ground_y = new_ground_y;
+
+        if was_grounded {
+            if self.y > new_ground_y {
+                self.y = new_ground_y;
+            } else if self.y < new_ground_y {
+                self.state = State::Fall;
+                self.fall_velocity = 0.0;
+                self.time_in_state = 0.0;
+            }
         }
     }
 
@@ -282,5 +315,58 @@ mod tests {
             }
         }
         panic!("never returned to idle after falling");
+    }
+
+    #[test]
+    fn a_shrinking_screen_pulls_a_grounded_sprite_directly_onto_the_new_floor() {
+        // hitbox 50, screen 200 -> ground_y = 150.
+        let mut m = Motion::new(50.0, 50.0, 800.0, 200.0);
+        assert_eq!(m.tick(0.0).y, 150.0);
+
+        // Screen shrinks to 100 tall -> new ground_y = 50, above (smaller
+        // y than) where the sprite is standing. Nothing falls upward, so
+        // it must be placed on the new floor directly, not left floating
+        // below the visible area.
+        m.update_screen_size(800.0, 100.0);
+        let f = m.tick(0.0);
+        assert_eq!(f.y, 50.0);
+        assert_eq!(
+            f.clip, "idle",
+            "should not be falling - it was placed directly"
+        );
+    }
+
+    #[test]
+    fn a_growing_screen_drops_a_grounded_sprite_to_the_new_floor() {
+        // hitbox 50, screen 100 -> ground_y = 50.
+        let mut m = Motion::new(50.0, 50.0, 800.0, 100.0);
+        assert_eq!(m.tick(0.0).y, 50.0);
+
+        // Screen grows to 800 tall -> new ground_y = 750. The sprite is
+        // still inside the visible area but now has nothing under it, so
+        // gravity should carry it down rather than leaving it floating.
+        m.update_screen_size(800.0, 800.0);
+        let f = m.tick(0.1);
+        assert_eq!(f.clip, "fall");
+        assert!(
+            f.y > 50.0,
+            "should have started falling toward the new floor"
+        );
+    }
+
+    #[test]
+    fn resizing_does_not_disturb_a_sprite_that_is_dragging_or_already_falling() {
+        let mut m = Motion::new(50.0, 50.0, 800.0, 200.0); // ground_y = 150
+        m.begin_drag();
+        m.drag_to(0.0, -100.0); // lifted well off the ground, y = 50
+        let before = m.tick(0.0).y;
+
+        m.update_screen_size(800.0, 400.0); // ground_y now 350, doesn't matter mid-drag
+        let after = m.tick(0.0);
+        assert_eq!(after.clip, "idle"); // still shows as dragged (idle clip)
+        assert_eq!(
+            after.y, before,
+            "a resize must not move a sprite being actively dragged"
+        );
     }
 }

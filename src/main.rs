@@ -37,15 +37,17 @@ fn main() {
         win.set_display_size(loaded.hitbox.width as i32, loaded.hitbox.height as i32);
         win.set_texture(&idle_path);
 
-        let monitor_size = gtk4::prelude::WidgetExt::display(win.gtk_window())
+        let monitor = gtk4::prelude::WidgetExt::display(win.gtk_window())
             .monitors()
             .item(0)
-            .and_then(|m| m.downcast::<gtk4::gdk::Monitor>().ok())
+            .and_then(|m| m.downcast::<gtk4::gdk::Monitor>().ok());
+        let (screen_width, screen_height) = monitor
+            .as_ref()
             .map(|m| {
                 let geometry = m.geometry();
                 (geometry.width() as f64, geometry.height() as f64)
-            });
-        let (screen_width, screen_height) = monitor_size.unwrap_or((1920.0, 1080.0));
+            })
+            .unwrap_or((1920.0, 1080.0));
 
         let motion = std::rc::Rc::new(std::cell::RefCell::new(motion::Motion::new(
             loaded.hitbox.width,
@@ -98,6 +100,21 @@ fn main() {
             },
             move || motion_for_drag_end.borrow_mut().end_drag(),
         );
+
+        // A display can be reconfigured while the pet is running (a
+        // resolution change, a monitor added/removed, an external display
+        // unplugged) — recompute the ground and, if the pet was standing
+        // on it, either pull it onto the new floor or let it fall to it.
+        // See Motion::update_screen_size for the two directions.
+        if let Some(monitor) = monitor {
+            let motion_for_resize = motion.clone();
+            monitor.connect_geometry_notify(move |m| {
+                let geometry = m.geometry();
+                motion_for_resize
+                    .borrow_mut()
+                    .update_screen_size(geometry.width() as f64, geometry.height() as f64);
+            });
+        }
 
         spawn_bridge_listener(emotion.clone());
 
