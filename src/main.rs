@@ -64,8 +64,21 @@ fn main() {
         let emotion_for_tick = emotion.clone();
         let clips_for_tick = loaded.clips.clone();
         let idle_path_for_tick = idle_path.clone();
+        // Real elapsed time rather than the interval we asked for. A timer
+        // fires late -- a busy machine, a lid opened after hours -- and a tick
+        // that pretends otherwise walks the pet a fixed distance for a frame
+        // that took longer, so the motion drifts away from the clock it is
+        // drawn against. The other three ports all measure; this one did not.
+        //
+        // The cap is what stops a lid reopening from teleporting the pet
+        // across the screen in a single frame.
+        const MAX_DELTA: f64 = 0.1;
+        let mut last_tick = std::time::Instant::now();
         gtk4::glib::source::timeout_add_local(std::time::Duration::from_millis(16), move || {
-            let frame = motion_for_tick.borrow_mut().tick(0.016);
+            let now = std::time::Instant::now();
+            let dt = now.duration_since(last_tick).as_secs_f64().min(MAX_DELTA);
+            last_tick = now;
+            let frame = motion_for_tick.borrow_mut().tick(dt);
             let effective_clip = emotion_for_tick
                 .borrow_mut()
                 .tick()
