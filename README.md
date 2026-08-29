@@ -38,10 +38,8 @@ Four pieces are here so far:
   architecture; only this one message exists so far, nothing richer yet
   (no shared sessions, no forwarding chat into the pet, etc.).
 
-Not yet ported: Wayland support (X11 only, by design for this slice — see
-the [design spec](docs/superpowers/specs/2026-08-24-linux-pet-mvp-design.md)
-if it's tracked in this checkout), and `PuckClient`'s code editor, terminal
-pane, and workspaces.
+Not yet ported: Wayland support (X11 only, by design for this slice), and
+`PuckClient`'s code editor, terminal pane, and workspaces.
 
 ### Build and run — pet overlay
 
