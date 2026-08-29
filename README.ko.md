@@ -7,10 +7,10 @@
 >
 > 플랫폼: [macOS](https://github.com/desFernan/puck-mac) · [Windows](https://github.com/desFernan/puck-windows) · **Linux** (여기)
 
-### 💬 [디스코드 참여하기](https://discord.gg/ePBZVnwSYE)
+### 💬 [디스코드 참여하기](https://discord.gg/nGqtBGP857)
 
 버그 제보, 기능 요청, 빌드 관련 질문, 아니면 그냥 놀러 오고 싶어도 —
-[서포트 서버](https://discord.gg/ePBZVnwSYE)가 가장 빠른 연락 방법입니다. 놀러 오세요!
+[서포트 서버](https://discord.gg/nGqtBGP857)가 가장 빠른 연락 방법입니다. 놀러 오세요!
 
 AI 에이전트이기도 한 Linux 데스크톱 펫입니다. Rust 바이너리 세 개로 구성돼 있어요:
 
@@ -119,4 +119,4 @@ manifest:
 ## 커뮤니티
 
 질문, 버그 제보, 기능 아이디어, 아니면 그냥 직접 만든 아바타를 자랑하고 싶어도 —
-**[디스코드](https://discord.gg/ePBZVnwSYE)**에서 만나요.
+**[디스코드](https://discord.gg/nGqtBGP857)**에서 만나요.
