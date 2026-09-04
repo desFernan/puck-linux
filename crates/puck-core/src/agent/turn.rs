@@ -85,7 +85,12 @@ pub fn run_turn(
                     content: "the user declined to run this tool call".to_string(),
                     is_error: true,
                 }
-            } else if let Some(handler) = tools.iter().find(|t| t.definition().name == name) {
+            } else if let Some(handler) = tools
+                .iter()
+                .zip(&tool_defs)
+                .find(|(_, def)| def.name == name)
+                .map(|(handler, _)| handler)
+            {
                 handler.run(&input)
             } else {
                 ToolOutcome {
