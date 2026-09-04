@@ -41,6 +41,14 @@ crates/puck-linux/   펫과 GTK 채팅 창, 그리고 그 아래의 avatar·moti
 아직 포팅되지 않은 것: Wayland 지원(지금은 X11 전용),
 그리고 puck-mac의 진짜 `PuckClient`에 있는 코드 에디터·터미널 패널·워크스페이스.
 
+## 설치
+
+릴리스에 압축 파일이 붙어 있다면 그 안에 바이너리 세 개가 들어 있습니다. GTK4와
+X11을 동적으로 링크하므로 런타임 라이브러리(Debian/Ubuntu는 `libgtk-4-1`,
+`libx11-6`, Fedora는 `gtk4`)와 X11 세션은 여전히 필요합니다.
+
+아니면 아래에서 직접 빌드하세요.
+
 ## 빌드
 
 Rust와 GTK4 개발 헤더(Debian/Ubuntu는 `libgtk-4-dev libx11-dev`, Fedora는
@@ -133,6 +141,9 @@ manifest:
 
 질문, 버그 제보, 기능 아이디어, 아니면 그냥 직접 만든 아바타를 자랑하고 싶어도 —
 **[디스코드](https://discord.gg/nGqtBGP857)**에서 만나요.
+
+직접 고쳐보고 싶다면 [CONTRIBUTING.md](CONTRIBUTING.md)에 빌드 방법, 쉬운
+이슈가 어디 있는지, 어떤 PR이 좋은지 적어두었습니다.
 
 ## 라이선스
 

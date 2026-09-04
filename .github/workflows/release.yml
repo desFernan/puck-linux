@@ -1,0 +1,56 @@
+name: Release
+
+# Builds the three binaries and attaches them to the release for a v* tag, so
+# that the Releases page carries something other than notes. They link GTK4 and
+# X11 dynamically, so the archive is not self-contained: the release notes say
+# which runtime packages a machine needs.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach to'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Install GTK4 and X11 development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libx11-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --workspace
+
+      - name: Package
+        id: package
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          NAME="puck-linux-${TAG#v}-x86_64-linux-gnu.tar.gz"
+          tar -czf "$NAME" -C target/release puck-linux puck-agent puck-client
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG='${{ steps.package.outputs.tag }}'
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "Puck for Linux ${TAG#v}" --generate-notes
+          gh release upload "$TAG" '${{ steps.package.outputs.asset }}' --clobber

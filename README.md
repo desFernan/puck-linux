@@ -43,6 +43,15 @@ crates/puck-linux/   the pet and the GTK chat window, over the avatar,
 Not ported yet: Wayland (X11 only for now), and the code
 editor, terminal pane and workspaces that puck-mac's real `PuckClient` has.
 
+## Install
+
+If the release you want has an archive attached, it holds the three binaries.
+They link GTK4 and X11 dynamically, so the machine still needs the runtime
+libraries (`libgtk-4-1` and `libx11-6` on Debian and Ubuntu, `gtk4` on Fedora)
+and an X11 session.
+
+Otherwise build from source, below.
+
 ## Build
 
 Needs Rust and GTK4 development headers (`libgtk-4-dev libx11-dev` on
@@ -141,6 +150,9 @@ port reads the subset above and ignores the rest.
 
 Questions, bug reports, feature ideas, or just want to show off your custom
 avatar — join us on **[Discord](https://discord.gg/nGqtBGP857)**.
+
+Want to help? [CONTRIBUTING.md](CONTRIBUTING.md) says how to build it, where
+the easy issues are, and what a good pull request looks like here.
 
 ## License
 
