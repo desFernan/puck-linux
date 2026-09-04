@@ -1,0 +1,58 @@
+name: Linux tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # puck-linux links GTK4 and gdk4-x11 through pkg-config, so the
+      # development headers have to be present before anything is built.
+      # puck-core and puck-agent need none of this -- the "agent without a
+      # desktop" job below proves it by installing nothing.
+      - name: Install GTK4 and X11 development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libx11-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run the test suite
+        run: cargo test --workspace
+
+  # The point of the three-crate split: the agent half builds and tests
+  # with no GTK, no X11 and no desktop of any kind. If this job ever needs
+  # an apt-get to pass, a desktop dependency has leaked into puck-core.
+  agent-without-a-desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p puck-core
+      - run: cargo build -p puck-agent

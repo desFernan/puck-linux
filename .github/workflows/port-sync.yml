@@ -27,6 +27,15 @@ jobs:
           BEFORE="${{ github.event.before }}"
           AFTER="${{ github.event.after }}"
           ZERO="0000000000000000000000000000000000000000"
+          # A force-push leaves `before` pointing at a commit this repository
+          # no longer has, and `git log BEFORE..AFTER` then fails the whole
+          # job rather than reporting anything. Treated like a new branch:
+          # summarise the tip, which is the honest answer when the range it
+          # was asked about no longer exists.
+          if [ "$BEFORE" != "$ZERO" ] && ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "note: $BEFORE is gone (history rewritten); summarising $AFTER alone"
+            BEFORE="$ZERO"
+          fi
           if [ "$BEFORE" = "$ZERO" ]; then
             LOG=$(git log -1 --pretty=format:'- [`%h`](https://github.com/${{ github.repository }}/commit/%H) %s' "$AFTER")
           else
