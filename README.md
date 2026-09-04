@@ -22,15 +22,15 @@ A Linux desktop pet that is also an AI agent. Three Rust binaries:
 - **`puck-client`** — the same agent in a minimal GTK4 chat window, the current
   `PuckClient`-equivalent; approvals are a Yes/No dialog instead of a prompt.
 
-The three talk over a local socket bridge (`src/bridge.rs`): while a front end
+The three talk over a local socket bridge (`crates/puck-core/src/bridge.rs`): while a front end
 is working on a request it tells the pet to show a `thinking` clip, then
 `happy` or `sad` depending on how the turn ended (falling back to `idle` if the
-avatar doesn't define one). That is the first slice of puck-mac's
+avatar doesn't define one). That is the first piece of puck-mac's
 pet-talks-to-client architecture — one message so far, nothing richer yet: no
 shared sessions, no forwarding chat into the pet. The agent core lives in
-`src/agent/`.
+`crates/puck-core/`.
 
-Not ported yet: Wayland (X11 only, by design for this slice), and the code
+Not ported yet: Wayland (X11 only for now), and the code
 editor, terminal pane and workspaces that puck-mac's real `PuckClient` has.
 
 ## Build
@@ -45,19 +45,23 @@ cargo run --bin puck-agent                             # terminal chat
 cargo run --bin puck-client                            # GTK4 chat window
 ```
 
+`puck-agent` alone needs none of that: it is a terminal program in its own
+crate, and `cargo run -p puck-agent` builds without GTK or X11 present.
+
 The pet takes the avatar folder as its one argument — see
 [Making it your own](#making-it-your-own).
 
 ## Test
 
 ```sh
-cargo test --bin puck-linux   # pet: parsing, animation/physics state machine, emotion override
-cargo test --lib              # agent + bridge: wire format, tool-call loop, real HTTP/socket round trips
+cargo test                 # everything
+cargo test -p puck-core    # agent + bridge only — no GTK, no X11, no Linux
+cargo test -p puck-linux   # pet: package parsing, motion state machine, emotion override
 ```
 
-They are separate targets, so `--lib` and `--bin puck-linux` cannot share one
-invocation; plain `cargo test` runs both, plus the `puck-agent`/`puck-client`
-binaries' own (currently empty) test targets.
+`puck-core` is plain Rust, so its tests — wire format, the tool-call loop,
+real HTTP and socket round trips — run anywhere, including on a machine with
+no GTK development headers at all.
 
 Bridge tests use a real Unix socket at a temp path. `PUCK_BRIDGE_SOCKET` points
 the pet, `puck-agent` or `puck-client` at a non-default socket — useful for

@@ -21,14 +21,14 @@ AI 에이전트이기도 한 Linux 데스크톱 펫입니다. Rust 바이너리 
 - **`puck-client`** — 같은 에이전트를 띄우는 최소한의 GTK4 채팅 창. 지금의
   `PuckClient` 대응물이며, 승인은 터미널 프롬프트 대신 예/아니오 대화상자입니다.
 
-셋은 로컬 소켓 브리지(`src/bridge.rs`)로 통신합니다: 프런트엔드가 요청을
+셋은 로컬 소켓 브리지(`crates/puck-core/src/bridge.rs`)로 통신합니다: 프런트엔드가 요청을
 처리하는 동안 펫에게 `thinking` 클립을, 턴이 끝나면 결과에 따라 `happy` 또는
 `sad`를 보여 주라고 알려 줍니다 (아바타에 그 클립이 없으면 `idle`로 대체).
 puck-mac의 펫-클라이언트 아키텍처의 첫 조각이고, 아직 메시지는 이것 하나뿐입니다
-— 세션 공유나 채팅 내용 전달 같은 건 없습니다. 에이전트 코어는 `src/agent/`에
+— 세션 공유나 채팅 내용 전달 같은 건 없습니다. 에이전트 코어는 `crates/puck-core/`에
 있습니다.
 
-아직 포팅되지 않은 것: Wayland 지원(이번 슬라이스는 의도적으로 X11 전용),
+아직 포팅되지 않은 것: Wayland 지원(지금은 X11 전용),
 그리고 puck-mac의 진짜 `PuckClient`에 있는 코드 에디터·터미널 패널·워크스페이스.
 
 ## 빌드
@@ -42,19 +42,22 @@ cargo run --bin puck-agent                             # 터미널 채팅
 cargo run --bin puck-client                            # GTK4 채팅 창
 ```
 
+`puck-agent`만은 아무것도 필요 없습니다. 자기 크레이트에 든 터미널 프로그램이라
+GTK나 X11 없이도 `cargo run -p puck-agent`로 빌드됩니다.
+
 펫은 아바타 폴더를 유일한 인자로 받습니다 — [내 것으로
 만들기](#내-것으로-만들기) 참고.
 
 ## 테스트
 
 ```sh
-cargo test --bin puck-linux   # 펫: 파싱, 애니메이션/물리 상태기계, 감정 오버라이드
-cargo test --lib              # 에이전트 + 브리지: 와이어 포맷, 도구 호출 루프, 실제 HTTP/소켓 왕복
+cargo test                 # 전부
+cargo test -p puck-core    # 에이전트 + 브리지만 — GTK도 X11도 Linux도 필요 없음
+cargo test -p puck-linux   # 펫: 패키지 파싱, 모션 상태기계, 감정 오버라이드
 ```
 
-둘은 별개 타깃이라 `--lib`와 `--bin puck-linux`를 한 번에 쓸 수 없습니다. 그냥
-`cargo test`는 둘 다, 그리고 `puck-agent`/`puck-client`의 (지금은 비어 있는)
-테스트 타깃까지 돌립니다.
+`puck-core`는 순수 Rust라서 그 테스트 — 와이어 포맷, 도구 호출 루프, 실제
+HTTP·소켓 왕복 — 는 GTK 개발 헤더가 아예 없는 머신에서도 그대로 돕니다.
 
 브리지 테스트는 임시 경로의 실제 Unix 소켓을 씁니다. `PUCK_BRIDGE_SOCKET`으로
 펫·`puck-agent`·`puck-client`를 기본이 아닌 소켓에 붙일 수 있습니다 — 여러 개를

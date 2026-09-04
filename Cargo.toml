@@ -1,16 +1,21 @@
-[package]
-name = "puck-linux"
+# Three crates rather than one, because the three binaries do not need the
+# same things. `puck-core` (the agent and the bridge) is pure Rust: it
+# builds and its tests run on any machine, including one with no GTK or X11
+# at all. Only the pet and the GTK chat window pull those in, and they live
+# in `puck-linux`. As a single package every dependency compiled into every
+# binary, so `puck-agent` — a terminal REPL that opens no window — linked
+# the X11 client libraries, and `cargo test` for the agent could not even
+# be run without GTK's development headers installed.
+[workspace]
+resolver = "2"
+members = ["crates/puck-core", "crates/puck-agent", "crates/puck-linux"]
+
+[workspace.package]
 version = "0.1.1"
 edition = "2021"
 
-[dependencies]
-gtk4 = "0.9"
-gdk4-x11 = "0.9"
-x11rb = "0.13"
+[workspace.dependencies]
+puck-core = { path = "crates/puck-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-async-channel = "2"
-
-[dev-dependencies]
 tempfile = "3"

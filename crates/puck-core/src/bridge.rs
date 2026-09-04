@@ -1,7 +1,7 @@
 //! A minimal local socket bridge between the pet overlay and an agent
 //! front end (`puck-agent`/`puck-client`), matching puck-mac's
-//! pet-talks-to-client-over-a-local-socket architecture. This first slice
-//! carries one message: "show this emotion clip for a bit" — enough for
+//! pet-talks-to-client-over-a-local-socket architecture. It carries one
+//! message so far: "show this emotion clip for a bit" — enough for
 //! an agent to make the pet visibly react (thinking/happy/sad) without the
 //! pet knowing anything about the agent's internals.
 

@@ -1,6 +1,6 @@
 use gtk4::prelude::*;
 use gtk4::{glib, Application, ApplicationWindow};
-use puck_linux::agent::{load_dotenv, run_turn, Approver, Client, RunShell, Session, ToolHandler};
+use puck_core::agent::{load_dotenv, run_turn, Approver, Client, RunShell, Session, ToolHandler};
 use std::cell::RefCell;
 use std::sync::mpsc;
 
@@ -67,13 +67,13 @@ fn spawn_worker(
                 ui_tx: ui_tx.clone(),
             };
             let text_tx = ui_tx.clone();
-            puck_linux::bridge::notify_emotion("thinking");
+            puck_core::bridge::notify_emotion("thinking");
             let result = run_turn(&client, &mut session, &tools, &mut approver, &text, |t| {
                 let _ = text_tx.send_blocking(UiEvent::AssistantText(t.to_string()));
             });
             match &result {
-                Ok(()) => puck_linux::bridge::notify_emotion("happy"),
-                Err(_) => puck_linux::bridge::notify_emotion("sad"),
+                Ok(()) => puck_core::bridge::notify_emotion("happy"),
+                Err(_) => puck_core::bridge::notify_emotion("sad"),
             }
             if let Err(e) = result {
                 let _ = ui_tx.send_blocking(UiEvent::Error(e.to_string()));
