@@ -30,6 +30,16 @@ pet-talks-to-client architecture — one message so far, nothing richer yet: no
 shared sessions, no forwarding chat into the pet. The agent core lives in
 `crates/puck-core/`.
 
+The code is three crates:
+
+```
+crates/puck-core/    the agent — Anthropic client, tool loop, session —
+                     and the bridge. Plain Rust, no desktop.
+crates/puck-agent/   the terminal front end.
+crates/puck-linux/   the pet and the GTK chat window, over the avatar,
+                     motion, emotion and window modules behind them.
+```
+
 Not ported yet: Wayland (X11 only for now), and the code
 editor, terminal pane and workspaces that puck-mac's real `PuckClient` has.
 
