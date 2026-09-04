@@ -1,0 +1,16 @@
+[package]
+name = "puck-linux"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+puck-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+gtk4 = "0.9"
+gdk4-x11 = "0.9"
+x11rb = "0.13"
+async-channel = "2"
+
+[dev-dependencies]
+tempfile.workspace = true

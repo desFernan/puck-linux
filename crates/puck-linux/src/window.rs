@@ -223,8 +223,8 @@ impl PuckWindow {
     }
 
     /// Moves the window's top-left corner to `(x, y)` in screen coordinates,
-    /// via a direct X11 `ConfigureWindow` request (X11-only for this slice,
-    /// same rationale as `set_always_on_top`: GTK4 top-level windows have no
+    /// via a direct X11 `ConfigureWindow` request (X11-only, same
+    /// rationale as `set_always_on_top`: GTK4 top-level windows have no
     /// portable positioning API, and none is needed for Wayland here). A
     /// no-op if `(x, y)` matches the last successfully-requested position,
     /// since this is called every animation tick even while the sprite is
@@ -303,7 +303,7 @@ fn ensure_x11<'a>(
 /// Sets the EWMH `_NET_WM_STATE_ABOVE` hint on the window's underlying X11
 /// surface. GTK4 dropped `Window::set_keep_above`, so this talks to the X
 /// server directly. No-op (logs a warning) if the surface isn't X11 — e.g.
-/// running under Wayland, which is out of scope for this slice.
+/// running under Wayland, which this port does not support yet.
 fn set_always_on_top(window: &ApplicationWindow, cache: &RefCell<Option<X11State>>) {
     let Some(state) = ensure_x11(window, cache) else {
         eprintln!("puck: could not establish an X11 connection for the always-on-top hint");

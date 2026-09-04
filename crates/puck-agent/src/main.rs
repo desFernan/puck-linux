@@ -1,4 +1,4 @@
-use puck_linux::agent::{load_dotenv, Approver, Client, RunShell, Session, ToolHandler};
+use puck_core::agent::{load_dotenv, Approver, Client, RunShell, Session, ToolHandler};
 use std::io::{self, BufRead, Write};
 
 const DEFAULT_MODEL: &str = "claude-opus-5";
@@ -52,8 +52,8 @@ fn main() {
             continue;
         }
 
-        puck_linux::bridge::notify_emotion("thinking");
-        let result = puck_linux::agent::run_turn(
+        puck_core::bridge::notify_emotion("thinking");
+        let result = puck_core::agent::run_turn(
             &client,
             &mut session,
             &tools,
@@ -62,8 +62,8 @@ fn main() {
             |text| println!("{text}"),
         );
         match &result {
-            Ok(()) => puck_linux::bridge::notify_emotion("happy"),
-            Err(_) => puck_linux::bridge::notify_emotion("sad"),
+            Ok(()) => puck_core::bridge::notify_emotion("happy"),
+            Err(_) => puck_core::bridge::notify_emotion("sad"),
         }
         if let Err(e) = result {
             eprintln!("puck-agent: {e}");

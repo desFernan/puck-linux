@@ -1,11 +1,7 @@
-mod avatar;
-mod emotion;
-mod motion;
-mod window;
-
 use gtk4::prelude::*;
 use gtk4::Application;
-use puck_linux::bridge::{self, BridgeMessage};
+use puck_core::bridge::{self, BridgeMessage};
+use puck_linux::{avatar, emotion, motion, window};
 
 fn main() {
     let avatar_path = std::env::args().nth(1);

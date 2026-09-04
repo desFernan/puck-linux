@@ -1,0 +1,8 @@
+[package]
+name = "puck-agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+puck-core.workspace = true
+serde_json.workspace = true
