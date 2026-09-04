@@ -32,6 +32,7 @@ fn main() {
             .clone();
         win.set_display_size(loaded.hitbox.width as i32, loaded.hitbox.height as i32);
         win.set_texture(&idle_path);
+        win.set_clip_description("idle");
 
         let monitor = gtk4::prelude::WidgetExt::display(win.gtk_window())
             .monitors()
@@ -85,6 +86,7 @@ fn main() {
                     .get(&effective_clip)
                     .unwrap_or(&idle_path_for_tick);
                 win_for_tick.set_texture(path);
+                win_for_tick.set_clip_description(&effective_clip);
                 *last_clip.borrow_mut() = effective_clip;
             }
             win_for_tick.set_facing_right(frame.facing_right);

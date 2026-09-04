@@ -83,10 +83,17 @@ fn spawn_worker(
     cmd_tx
 }
 
-fn append_line(buffer: &gtk4::TextBuffer, text: &str) {
+/// Appends `text` as its own line and keeps the view on it. The transcript
+/// only grows, so without scrolling to the end every reply after the first
+/// screenful arrived out of sight.
+fn append_line(view: &gtk4::TextView, text: &str) {
+    let buffer = view.buffer();
     let mut end = buffer.end_iter();
     buffer.insert(&mut end, text);
     buffer.insert(&mut end, "\n");
+    let mark = buffer.create_mark(None, &buffer.end_iter(), false);
+    view.scroll_to_mark(&mark, 0.0, false, 0.0, 0.0);
+    buffer.delete_mark(&mark);
 }
 
 fn build_ui(app: &Application, client: Client) {
@@ -102,9 +109,12 @@ fn build_ui(app: &Application, client: Client) {
         .cursor_visible(false)
         .wrap_mode(gtk4::WrapMode::WordChar)
         .build();
-    let transcript_buffer = transcript_view.buffer();
+    // Neither of these two has a visible label beside it, so without a
+    // name of its own a screen reader announces the transcript and the
+    // entry as an unnamed text area and an unnamed text field.
+    transcript_view.update_property(&[gtk4::accessible::Property::Label("Conversation")]);
     append_line(
-        &transcript_buffer,
+        &transcript_view,
         "puck-client — type a message below and press Enter.",
     );
 
@@ -116,6 +126,7 @@ fn build_ui(app: &Application, client: Client) {
     let entry = gtk4::Entry::builder()
         .placeholder_text("Message Puck...")
         .build();
+    entry.update_property(&[gtk4::accessible::Property::Label("Message Puck")]);
 
     let layout = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     layout.append(&scroller);
@@ -132,12 +143,12 @@ fn build_ui(app: &Application, client: Client) {
     let cmd_tx = spawn_worker(client, tools, ui_tx);
 
     let window_for_events = window.clone();
-    let buffer_for_events = transcript_buffer.clone();
+    let view_for_events = transcript_view.clone();
     glib::spawn_future_local(async move {
         while let Ok(event) = ui_rx.recv().await {
             match event {
-                UiEvent::AssistantText(text) => append_line(&buffer_for_events, &text),
-                UiEvent::Error(err) => append_line(&buffer_for_events, &format!("[error] {err}")),
+                UiEvent::AssistantText(text) => append_line(&view_for_events, &text),
+                UiEvent::Error(err) => append_line(&view_for_events, &format!("[error] {err}")),
                 UiEvent::ApprovalRequest {
                     tool_name,
                     input,
@@ -170,7 +181,7 @@ fn build_ui(app: &Application, client: Client) {
         if text.is_empty() {
             return;
         }
-        append_line(&transcript_buffer, &format!("> {text}"));
+        append_line(&transcript_view, &format!("> {text}"));
         let _ = cmd_tx.send(WorkerCommand::UserMessage(text.to_string()));
         entry.set_text("");
     });
