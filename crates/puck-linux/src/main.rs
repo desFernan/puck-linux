@@ -77,7 +77,7 @@ fn main() {
             let frame = motion_for_tick.borrow_mut().tick(dt);
             let effective_clip = emotion_for_tick
                 .borrow_mut()
-                .tick()
+                .tick(dt)
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| frame.clip.to_string());
             if effective_clip != *last_clip.borrow() {
@@ -175,7 +175,9 @@ fn spawn_bridge_listener(emotion: std::rc::Rc<std::cell::RefCell<emotion::Emotio
     gtk4::glib::spawn_future_local(async move {
         while let Ok(message) = rx.recv().await {
             let BridgeMessage::SetEmotion { clip } = message;
-            emotion.borrow_mut().set(clip, emotion::EMOTION_TICKS);
+            emotion
+                .borrow_mut()
+                .set(clip, emotion::EMOTION_DURATION_SECS);
         }
     });
 }

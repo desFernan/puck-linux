@@ -123,9 +123,19 @@ impl Motion {
     /// gesture can report updates faster than the tick interval, and
     /// waiting for the next tick to move the window makes dragging feel
     /// laggy.
+    ///
+    /// The position is held inside the screen. A pointer can be dragged
+    /// past every edge, and the pet used to follow it: off the top, off
+    /// the side, below the floor — where nothing brings it back, since a
+    /// window with no visible pixels cannot be grabbed again. It follows
+    /// the hand as far as the screen goes and no further, keeping hold of
+    /// the ceiling the same way it keeps hold of the floor.
     pub fn drag_to(&mut self, offset_x: f64, offset_y: f64) -> (f64, f64) {
-        self.x = self.drag_anchor.0 + offset_x;
-        self.y = self.drag_anchor.1 + offset_y;
+        let max_x = (self.screen_width - self.hitbox_width).max(0.0);
+        // `ground_y` is the screen's height less the sprite's own, which
+        // is exactly the lowest top-left corner that keeps it on screen.
+        self.x = (self.drag_anchor.0 + offset_x).clamp(0.0, max_x);
+        self.y = (self.drag_anchor.1 + offset_y).clamp(0.0, self.ground_y);
         (self.x, self.y)
     }
 
@@ -283,6 +293,24 @@ mod tests {
             f.y > ground_y - 100.0,
             "should have started falling back down (gravity increases y)"
         );
+    }
+
+    #[test]
+    fn a_drag_cannot_carry_the_pet_off_the_screen() {
+        // screen 800x600, hitbox 50 -> the top-left corner has to stay
+        // inside 0..=750 across and 0..=550 down.
+        let mut m = Motion::new(50.0, 50.0, 800.0, 600.0);
+        m.begin_drag();
+
+        m.drag_to(-9999.0, -9999.0);
+        let f = m.tick(0.0);
+        assert_eq!(f.x, 0.0);
+        assert_eq!(f.y, 0.0, "should have kept hold of the ceiling");
+
+        m.drag_to(9999.0, 9999.0);
+        let f = m.tick(0.0);
+        assert_eq!(f.x, 750.0);
+        assert_eq!(f.y, 550.0, "should not be dragged below the floor");
     }
 
     #[test]
