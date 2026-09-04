@@ -1,0 +1,110 @@
+name: Follow puck-mac
+
+# puck-mac is where this port's patches come from, and being told about them
+# depended on puck-mac's own Port Sync job reaching in here. That job has been
+# failing on bad credentials since 2026-08-29, and it is not in this repository
+# to fix. puck-windows stopped waiting on 2026-09-04; this is the same job,
+# doing the same thing for this repository: asking on a schedule rather than
+# waiting to be told.
+#
+# Reading a public repository needs no secret, and writing an issue here is
+# what GITHUB_TOKEN already does. Nothing about this depends on the other
+# repository's workflows or credentials, which was the point.
+
+on:
+  schedule:
+    # Hourly. Porting is a day's work, not a minute's, so this only has to be
+    # faster than somebody noticing by hand. Not on puck-windows's minute:
+    # two repositories asking puck-mac the same question at the same instant
+    # is a rate limit waiting to be found.
+    - cron: '37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  follow:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Nothing here needs the tree, so there is no checkout -- which leaves
+      # `gh` with no git remote to infer the repository from, and every issue
+      # call failing on a repository it was never told about.
+      GH_REPO: ${{ github.repository }}
+      SOURCE: desFernan/puck-mac
+      LABEL: needs-port-from-puck-mac
+    steps:
+      - name: Work out what is new
+        id: news
+        run: |
+          set -euo pipefail
+
+          # The issue is the state. Every issue this job writes ends with a
+          # marker naming the newest commit it reported, so the next run knows
+          # where it got to without keeping a file in the tree -- which would
+          # mean a bot commit on main, and a bot commit on main is another
+          # repository's tracking issue.
+          # Assigned before it is looped over: a command substitution that
+          # fails inside a `for` list is not something `set -e` stops for, so
+          # this read as "no issues seen yet" rather than as the error it was.
+          SEEN=$(gh issue list --label "$LABEL" --state all \
+                   --json number,updatedAt --jq 'sort_by(.updatedAt) | reverse | .[].number')
+
+          MARKER=""
+          for NUM in $SEEN; do
+            FOUND=$(gh issue view "$NUM" --json body --jq '.body' \
+                    | sed -n 's/.*<!-- last-seen: \([0-9a-f]\{7,40\}\) -->.*/\1/p' | head -1)
+            if [ -n "$FOUND" ]; then MARKER="$FOUND"; break; fi
+          done
+
+          LOG=""
+          if [ -n "$MARKER" ] && gh api "repos/$SOURCE/commits/$MARKER" >/dev/null 2>&1; then
+            LOG=$(gh api "repos/$SOURCE/compare/$MARKER...main" \
+                  --jq '.commits[] | "- [`\(.sha[0:7])`](https://github.com/'"$SOURCE"'/commit/\(.sha)) \(.commit.message | split("\n")[0])"')
+            NEWEST=$(gh api "repos/$SOURCE/compare/$MARKER...main" --jq '.commits[-1].sha // empty')
+          else
+            # No marker, or the commit it named is gone -- puck-mac rewrites
+            # its history, and a range starting at a commit that no longer
+            # exists is not a range. Report the tip alone, which is the honest
+            # answer when the question cannot be asked.
+            LOG=$(gh api "repos/$SOURCE/commits?per_page=1" \
+                  --jq '.[] | "- [`\(.sha[0:7])`](https://github.com/'"$SOURCE"'/commit/\(.sha)) \(.commit.message | split("\n")[0])"')
+            NEWEST=$(gh api "repos/$SOURCE/commits?per_page=1" --jq '.[0].sha')
+          fi
+
+          if [ -z "$LOG" ]; then
+            echo "nothing new"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            printf '%s\n' "$LOG"
+            printf '\n<!-- last-seen: %s -->\n' "$NEWEST"
+          } > /tmp/body.md
+          cat /tmp/body.md
+
+      - name: Tell this repository
+        if: steps.news.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+
+          NUM=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$NUM" ]; then
+            gh issue create \
+              --title "Port from puck-mac: new commits" \
+              --label "$LABEL" \
+              --body-file /tmp/body.md
+            exit 0
+          fi
+
+          # Appending to the open issue keeps one thread per porting session,
+          # the same as being pushed to. The marker moves to the issue body so
+          # the next run reads one place rather than the last comment.
+          gh issue comment "$NUM" --body-file /tmp/body.md
+          BODY=$(gh issue view "$NUM" --json body --jq '.body' \
+                 | sed '/<!-- last-seen: /d')
+          MARK=$(grep -o '<!-- last-seen: [0-9a-f]* -->' /tmp/body.md | head -1)
+          printf '%s\n\n%s\n' "$BODY" "$MARK" | gh issue edit "$NUM" --body-file -
