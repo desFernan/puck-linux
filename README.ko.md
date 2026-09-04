@@ -28,6 +28,16 @@ puck-mac의 펫-클라이언트 아키텍처의 첫 조각이고, 아직 메시�
 — 세션 공유나 채팅 내용 전달 같은 건 없습니다. 에이전트 코어는 `crates/puck-core/`에
 있습니다.
 
+코드는 크레이트 세 개입니다:
+
+```
+crates/puck-core/    에이전트(Anthropic 클라이언트, 도구 루프, 세션)와
+                     브리지. 순수 Rust, 데스크톱 의존성 없음.
+crates/puck-agent/   터미널 프런트엔드.
+crates/puck-linux/   펫과 GTK 채팅 창, 그리고 그 아래의 avatar·motion·
+                     emotion·window 모듈.
+```
+
 아직 포팅되지 않은 것: Wayland 지원(지금은 X11 전용),
 그리고 puck-mac의 진짜 `PuckClient`에 있는 코드 에디터·터미널 패널·워크스페이스.
 
