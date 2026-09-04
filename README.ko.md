@@ -133,3 +133,8 @@ manifest:
 
 질문, 버그 제보, 기능 아이디어, 아니면 그냥 직접 만든 아바타를 자랑하고 싶어도 —
 **[디스코드](https://discord.gg/nGqtBGP857)**에서 만나요.
+
+## 라이선스
+
+소스는 MIT입니다 — [LICENSE](LICENSE). 옆에 있는 **그림·아이콘·폰트·오디오는
+아닙니다**: 이유는 [LICENSE-ASSETS.md](LICENSE-ASSETS.md)에 적어두었습니다.

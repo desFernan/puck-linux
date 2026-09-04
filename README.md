@@ -141,3 +141,9 @@ port reads the subset above and ignores the rest.
 
 Questions, bug reports, feature ideas, or just want to show off your custom
 avatar — join us on **[Discord](https://discord.gg/nGqtBGP857)**.
+
+## License
+
+MIT for the source — see [LICENSE](LICENSE). **Not** for the artwork, icons,
+fonts or audio distributed next to it: see
+[LICENSE-ASSETS.md](LICENSE-ASSETS.md) for why.
