@@ -33,6 +33,11 @@ impl PuckWindow {
     pub fn new(app: &Application) -> Self {
         let window = ApplicationWindow::builder()
             .application(app)
+            // Undecorated, so nothing draws this title — but it is what a
+            // screen reader announces when the window takes focus, and
+            // what the window shows up as in a window list. Without it the
+            // pet is an untitled window.
+            .title("Puck")
             .decorated(false)
             .resizable(false)
             .default_width(200)
@@ -49,7 +54,15 @@ impl PuckWindow {
             &css,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
-        let drawing_area = DrawingArea::new();
+        // The pet is a picture that a screen reader would otherwise have
+        // nothing at all to say about: a bare DrawingArea reports no role,
+        // no name, and no state. Declaring it an image with a label gives
+        // it a name, and `set_clip_description` keeps that name current as
+        // the pet changes what it is doing.
+        let drawing_area = DrawingArea::builder()
+            .accessible_role(gtk4::AccessibleRole::Img)
+            .build();
+        drawing_area.update_property(&[gtk4::accessible::Property::Label("Puck, a desktop pet")]);
         window.set_child(Some(&drawing_area));
 
         let texture: Rc<RefCell<Option<gtk4::gdk::Texture>>> = Rc::new(RefCell::new(None));
@@ -203,14 +216,31 @@ impl PuckWindow {
 
     /// Loads the PNG at `path` and redraws, scaled to fit whatever size
     /// `set_display_size` last set (or the 200x200 default if it was never
-    /// called). Panics if the file can't be decoded — callers are expected
-    /// to have already validated the path exists via `avatar::load`.
+    /// called).
+    ///
+    /// A file that will not decode is reported and otherwise ignored,
+    /// leaving whatever was on screen there. `avatar::load` checks that
+    /// every clip file exists, but existing is not decoding — a truncated
+    /// download, a PNG saved as something else, a file replaced while the
+    /// pet was running. This used to panic, which killed the pet outright
+    /// partway through a walk because one of its frames was bad.
     pub fn set_texture(&self, path: &Path) {
         let file = gtk4::gio::File::for_path(path);
-        let tex = gtk4::gdk::Texture::from_file(&file)
-            .unwrap_or_else(|e| panic!("failed to decode {}: {e}", path.display()));
-        *self.texture.borrow_mut() = Some(tex);
-        self.drawing_area.queue_draw();
+        match gtk4::gdk::Texture::from_file(&file) {
+            Ok(tex) => {
+                *self.texture.borrow_mut() = Some(tex);
+                self.drawing_area.queue_draw();
+            }
+            Err(e) => eprintln!("puck: could not decode {}: {e}", path.display()),
+        }
+    }
+
+    /// Names the clip the pet is currently showing, for a screen reader.
+    /// The window itself is a picture with no text in it, so this is the
+    /// only way what the pet is doing reaches assistive technology.
+    pub fn set_clip_description(&self, clip: &str) {
+        self.drawing_area
+            .update_property(&[gtk4::accessible::Property::Description(clip)]);
     }
 
     /// Sets which way the sprite faces (mirrored horizontally when not
@@ -237,15 +267,20 @@ impl PuckWindow {
             return;
         };
         let aux = x11rb::protocol::xproto::ConfigureWindowAux::new().x(x).y(y);
-        let cookie = match state.conn.configure_window(state.xid, &aux) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("puck: failed to move window: {e:?}");
-                return;
-            }
-        };
-        if let Err(e) = cookie.check() {
-            eprintln!("puck: move rejected: {e:?}");
+        // Queue the move and flush, rather than waiting for the server to
+        // confirm it. `VoidCookie::check` is a full round trip to the X
+        // server, and this runs on the GTK main thread on every animation
+        // frame — sixty blocking round trips a second, spent to learn
+        // something about a request that does not fail in practice. A
+        // rejected move surfaces on the connection's error stream instead.
+        let sent = state
+            .conn
+            .configure_window(state.xid, &aux)
+            .map(|cookie| cookie.ignore_error())
+            .and_then(|()| state.conn.flush());
+        if let Err(e) = sent {
+            eprintln!("puck: failed to move window: {e:?}");
+            return;
         }
         self.last_pos.set(Some((x, y)));
     }
