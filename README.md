@@ -40,8 +40,10 @@ crates/puck-linux/   the pet and the GTK chat window, over the avatar,
                      motion, emotion and window modules behind them.
 ```
 
-Not ported yet: Wayland (X11 only for now), and the code
-editor, terminal pane and workspaces that puck-mac's real `PuckClient` has.
+Not ported yet: Wayland (X11 only for now), the code editor, terminal pane and
+workspaces that puck-mac's real `PuckClient` has, and what puck-mac added in
+0.2.0: shells that outlive the call that started them, work the agent runs on
+a schedule, and a diff of what it changed before you keep it.
 
 ## Install
 

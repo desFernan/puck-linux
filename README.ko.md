@@ -38,8 +38,10 @@ crates/puck-linux/   펫과 GTK 채팅 창, 그리고 그 아래의 avatar·moti
                      emotion·window 모듈.
 ```
 
-아직 포팅되지 않은 것: Wayland 지원(지금은 X11 전용),
-그리고 puck-mac의 진짜 `PuckClient`에 있는 코드 에디터·터미널 패널·워크스페이스.
+아직 포팅되지 않은 것: Wayland 지원(지금은 X11 전용), puck-mac의 진짜
+`PuckClient`에 있는 코드 에디터·터미널 패널·워크스페이스. 그리고 puck-mac이
+0.2.0에서 더한 것들: 호출보다 오래 사는 셸, 일정에 맞춰 도는 작업, 그리고
+에이전트가 바꾼 것을 받아들이기 전에 보여주는 diff.
 
 ## 설치
 
